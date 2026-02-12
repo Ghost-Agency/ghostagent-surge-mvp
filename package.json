@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@safe-global/api-kit": "^4.0.1",
+    "@safe-global/protocol-kit": "^6.1.2",
+    "ethers": "^6.16.0",
     "framer-motion": "^12.34.0",
     "next": "16.1.6",
     "react": "19.2.3",

@@ -76,5 +76,23 @@ Success State: After 2 seconds, show a success toast: 'Response routed via nftma
 Visuals: Use an 'Electric Blue' glow for the button to match our 'Claw' theme.
 ```
 
+- Vault: Agent Proof-of-Capital (AgentAuditCard) with Safe SDK balance audit
+
+```text
+Act as a Senior Frontend Engineer. Create a new component AgentAuditCard.tsx inside the /components folder.
+Data Fetching: Use the @safe-global/api-kit and @safe-global/protocol-kit to fetch the native xDAI balance for a provided Gnosis Chain Safe address.
+UI Design:
+Title: 'Agent Proof-of-Capital'
+Primary Stat: Large 'xDAI Balance' display with a glowing blue border.
+Asset List: A scrollable list of 'IP Assets' (e.g., 'ghostagent.ip', 'openclaw.gno').
+Badge: A 'Gnosis Pay Ready' green indicator if the balance is > 0.1 xDAI.
+The 'Audit' Animation: When the component loads, show a 'Scanning Blockchain...' progress bar for 1.5 seconds using Framer Motion.
+Integration: Drop this card into the 'Vault' tab of our main dashboard.
+
+UX Note: Handle user notifications when an audit is complete.
+- Option A (lightweight): Toast on audit completion.
+- Option B (persistent): Append audit results into a persistent "Audit Log" list stored in localStorage (or later, persisted in a backend).
+```
+
 ### Decisions
 - 

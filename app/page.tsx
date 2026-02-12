@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import AgentAuditCard from "@/components/AgentAuditCard";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
@@ -49,6 +50,7 @@ export default function Home() {
   const [tab, setTab] = useState<TabKey>("identity");
   const [handle, setHandle] = useState<string>("alice.molt.gno");
   const [checked, setChecked] = useState(false);
+  const [safeAddress, setSafeAddress] = useState<string>("0x0000000000000000000000000000000000000000");
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>("msg_001");
   const [copied, setCopied] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
@@ -370,21 +372,32 @@ export default function Home() {
                   title="Vault"
                   subtitle="Safe SDK integration planned: showing placeholders for now."
                 >
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="flex flex-col gap-4">
                     <div className="rounded-2xl border border-[var(--border)] bg-black/20 p-5">
-                      <div className="text-xs font-semibold tracking-[0.18em] text-[var(--muted)]">BALANCE</div>
-                      <div className="mt-2 text-2xl font-semibold">xDAI Balance</div>
-                      <div className="mt-2 text-sm text-[var(--muted)]">—</div>
-                      <div className="mt-4 text-xs text-[var(--muted)]">
-                        Placeholder until Safe SDK adapter is wired.
+                      <div className="text-xs font-semibold tracking-[0.18em] text-[var(--muted)]">SAFE ADDRESS</div>
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                        <input
+                          value={safeAddress}
+                          onChange={(e) => setSafeAddress(e.target.value)}
+                          placeholder="0x..."
+                          className="h-11 w-full rounded-xl border border-[var(--border)] bg-black/30 px-4 text-sm font-mono outline-none transition focus:border-[rgba(0,163,255,0.55)] focus:shadow-[0_0_0_3px_rgba(0,163,255,0.12)]"
+                        />
+                      </div>
+                      <div className="mt-2 text-xs text-[var(--muted)]">
+                        Gnosis Chain Safe address used to audit native xDAI balance.
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-[var(--border)] bg-black/20 p-5">
-                      <div className="text-xs font-semibold tracking-[0.18em] text-[var(--muted)]">PAYMENTS</div>
-                      <div className="mt-2 text-2xl font-semibold">Gnosis Pay Status</div>
-                      <div className="mt-2 text-sm text-[var(--muted)]">Not connected</div>
-                      <div className="mt-4 text-xs text-[var(--muted)]">
-                        Will reflect card status + settlement once connected.
+
+                    <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+                      <AgentAuditCard safeAddress={safeAddress} />
+
+                      <div className="rounded-2xl border border-[var(--border)] bg-black/20 p-5">
+                        <div className="text-xs font-semibold tracking-[0.18em] text-[var(--muted)]">PAYMENTS</div>
+                        <div className="mt-2 text-2xl font-semibold">Gnosis Pay Status</div>
+                        <div className="mt-2 text-sm text-[var(--muted)]">Not connected</div>
+                        <div className="mt-4 text-xs text-[var(--muted)]">
+                          Will reflect card status + settlement once connected.
+                        </div>
                       </div>
                     </div>
                   </div>
