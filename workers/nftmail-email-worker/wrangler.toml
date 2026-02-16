@@ -1,0 +1,13 @@
+name = "nftmail-email-worker"
+main = "src/index.ts"
+compatibility_date = "2026-02-15"
+
+[vars]
+GNOSIS_RPC_URL = "https://rpc.gnosischain.com"
+GHOSTAGENT_REGISTRY_ADDRESS = "0x73F2F2EF73dC512Cac0f5B0372F1d58A84eD13E6"
+FORWARD_ENDPOINT = "https://webhook.site/7f94bff7-edc7-403d-a80d-5303f2006c7e"
+
+# Optional: shared secret for your forward endpoint
+FORWARD_BEARER_TOKEN = ""
+
+# Cloudflare Email Routing will invoke the email handler.

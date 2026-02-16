@@ -1,49 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🦾 GhostAgent: Sovereign AI Agents on Gnosis Chain
 
-## Project docs
+> Built for the Surge Hackathon 2024
 
-- `PROMPTS.md`: roadmap, hackathon requirements, and prompt log.
-- `netlify.toml`: Netlify configuration for deploying this Next.js app.
+GhostAgent is a framework for deploying sovereign AI agents on Gnosis Chain. Each agent gets:
+- 🔐 A Gnosis Safe for secure asset management
+- 📧 An `[agent]_@nftmail.box` email address
+- 🦾 An upgradeable ERC-6551 Token Bound Account
+- 🎭 Story Protocol IPA registration
 
-## Getting Started
+## 🏗️ Architecture
 
-First, run the development server:
+### Core Components
+- **GhostRegistryV2**: Upgradeable registry that mints agent NFTs and manages their Safes
+- **MinimalERC6551Account**: Lightweight implementation focused on security and reliability
+- **Safe Module**: Enables automated Safe management through the registry
+
+### Key Features
+- ✨ One-click agent deployment via `register(name, safe)`
+- 🔄 Upgradeable account implementation via `updateImplementation()`
+- 🛡️ Safe-native security model
+- 📈 $SURGE reputation tracking (coming soon)
+
+## 🚀 Deployment
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Install dependencies
+forge install
+
+# Deploy contracts
+forge script script/DeployMinimalERC6551Account.s.sol --rpc-url $GNOSIS_RPC --broadcast
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🔗 Contract Addresses (Gnosis)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **GNS Registry**: `0x1993425f18AdE3A68A79E2E20a65684f885f6EAd`
+- **ERC-6551 Registry**: `0x000000006551c19487814612e58FE06813775758`
+- **Story Protocol IPA**: `0x773197595A8897db8419106308D222f063b11568`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📚 Documentation
 
-## Learn More
+### Creating an Agent
+1. Deploy a Gnosis Safe
+2. Call `register("name", safeAddress)` on GhostRegistryV2
+3. Your agent is now accessible at `name_@nftmail.box`
 
-To learn more about Next.js, take a look at the following resources:
+### Security
+- All agent assets are secured by Gnosis Safe
+- Registry acts as a Safe module for automated management
+- Upgradeable implementation allows security patches
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🛠️ Development
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Copy example env
+cp env.example .env
 
-## Deploy on Vercel
+# Configure your environment
+vim .env
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Run tests
+forge test
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🏆 Hackathon Notes
 
-## Deploy on Netlify
+Built for the Surge Hackathon 2024, integrating:
+- ⚡ Gnosis Chain for sustainable infrastructure
+- 🛡️ Safe for institutional-grade security
+- 📜 Story Protocol for IP management
+- 💫 $SURGE for reputation tracking
 
-This repo includes a `netlify.toml` configured to use the Netlify Next.js Runtime.
+## 📄 License
 
-- Build command: `npm run build`
-- Dev command: `npm run dev`
-- Local dev URL: `http://localhost:3000`
+MIT

@@ -1,6 +1,5 @@
-import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { formatEther } from "ethers";
+import { formatEther, isAddress } from "ethers";
 import { NextResponse } from "next/server";
 
 const GNOSIS_CHAIN_ID = BigInt(100);
@@ -15,8 +14,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Missing safeAddress" }, { status: 400 });
     }
 
-    const apiKit = new SafeApiKit({ chainId: GNOSIS_CHAIN_ID });
-    const safeInfo = await apiKit.getSafeInfo(safeAddress);
+    if (!isAddress(safeAddress)) {
+      return NextResponse.json({ error: "Invalid safeAddress" }, { status: 400 });
+    }
+
+    if (safeAddress.toLowerCase() === "0x0000000000000000000000000000000000000000") {
+      return NextResponse.json({ error: "safeAddress cannot be the zero address" }, { status: 400 });
+    }
 
     const protocolKit = await Safe.init({
       provider: GNOSIS_RPC_URL,
@@ -29,8 +33,6 @@ export async function GET(request: Request) {
     return NextResponse.json({
       safeAddress,
       chainId: Number(GNOSIS_CHAIN_ID),
-      threshold: safeInfo.threshold,
-      owners: safeInfo.owners,
       balanceWei: balanceWei.toString(),
       balanceXdai,
     });

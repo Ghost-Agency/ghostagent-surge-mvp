@@ -3,6 +3,10 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
+function isHexAddress(value: string) {
+  return /^0x[a-fA-F0-9]{40}$/.test(value);
+}
+
 type SafeBalanceResponse = {
   safeAddress: string;
   chainId: number;
@@ -52,7 +56,29 @@ export default function AgentAuditCard({ safeAddress, assets }: AgentAuditCardPr
       }
     }
 
-    if (safeAddress) void run();
+    const normalized = safeAddress.trim();
+    const isValid = isHexAddress(normalized);
+    const isZero = normalized.toLowerCase() === "0x0000000000000000000000000000000000000000";
+
+    if (!normalized) {
+      setLoading(false);
+      setData(null);
+      setError("Enter a Safe address to run an audit.");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!isValid || isZero) {
+      setLoading(false);
+      setData(null);
+      setError("Enter a valid non-zero Safe address.");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void run();
 
     return () => {
       cancelled = true;

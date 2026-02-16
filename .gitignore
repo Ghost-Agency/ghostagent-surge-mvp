@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Foundry
+cache/
+out/
+broadcast/
+
+# Hardhat
+artifacts/
+cache/
+coverage/
