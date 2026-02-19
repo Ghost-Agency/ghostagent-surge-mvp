@@ -1,0 +1,520 @@
+/// <reference types="@cloudflare/workers-types" />
+
+// Constants
+export const SIG_BALANCE_OF = '0x70a08231';
+export const SIG_GET_IDENTITY = '0x4f5c3a99';
+export const MIN_REPUTATION = BigInt('1000000000000000000'); // 1 SURGE
+export const SOVEREIGN_TTL_SECONDS = 8 * 24 * 60 * 60; // 8-day decay
+export const MAX_INBOX_MESSAGES = 50; // max messages per sovereign inbox
+export const AGENT_SUFFIX_RE = /^([a-z0-9-]+)_@nftmail\.box$/i;
+
+// Types and interfaces
+export type IdentityState = 'AGENT' | 'HUMAN' | 'NONE';
+export type AgentTier = 'executive' | 'standard' | 'swarm';
+
+export interface EmailData {
+  from: string;
+  to: string;
+  subject: string;
+  content: string;
+  timestamp: number;
+}
+
+export interface MessageMetadata {
+  isInternal: boolean;
+  isVerified: boolean;
+  channel: 'ghost-wire' | 'external' | 'zoho';
+  senderAgent?: string;
+  recipientAgent?: string;
+}
+
+// $SURGE reputation scoring
+export interface SurgeScore {
+  agent: string;
+  score: number;
+}
+
+export interface SurgeMetadata {
+  participantScores: SurgeScore[];
+  averageScore: number;
+  maxScore: number;
+  priority: number;
+}
+
+export interface CalendarEvent {
+  id: string;
+  type: 'SYNC' | 'TASK' | 'HEARTBEAT';
+  title: string;
+  description?: string;
+  startTime: number;
+  endTime: number;
+  participants: string[];
+  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+  heartbeatVerified?: boolean;
+  surgeScore?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface CalendarInvite {
+  type: 'INVITE';
+  event: CalendarEvent;
+  from: string;
+  to: string[];
+  message?: string;
+}
+
+interface MailStorageConfig {
+  backend: 'Zoho' | 'IPFS';
+  zohoOrgId: string;
+  zohoRefreshToken: string;
+  zohoClientId: string;
+  zohoClientSecret: string;
+  zohoApiDomain: string;
+  zohoAccountsDomain?: string;
+  zohoAccountId?: string;
+  ipfsGateway?: string;
+  surgeToken: string;
+  quarantineAddress: string;
+  ghostRegistry: string;
+  inboxKV?: KVNamespace;
+  calendarKV?: KVNamespace;
+}
+
+export interface AgentStatus {
+  agent: string;
+  tier: 'executive' | 'standard' | 'swarm';
+  surgeScore?: number;
+  inbox: {
+    count: number;
+    unread?: number;
+    lastMessage?: {
+      id: string;
+      from: string;
+      subject: string;
+      timestamp: number;
+      isInternal: boolean;
+      isVerified: boolean;
+      channel: 'ghost-wire' | 'external' | 'zoho';
+    };
+  };
+  calendar: {
+    count: number;
+    nextEvent?: CalendarEvent;
+    upcomingEvents: CalendarEvent[];
+  };
+  heartbeat: {
+    lastBeat?: number;
+    isActive: boolean;
+    nextScheduled?: number;
+  };
+  metadata?: Record<string, any>;
+}
+
+export class MailStorageAdapter {
+  private config: MailStorageConfig;
+  private cachedZohoAccountId?: string;
+  private cachedZohoFromAddress?: string;
+  private cachedZohoAccessToken?: { token: string; expiresAtMs: number };
+
+  constructor(config: MailStorageConfig) {
+    this.config = config;
+    this.cachedZohoAccountId = config.zohoAccountId;
+  }
+
+  private async getReputation(safeAddress: string): Promise<bigint> {
+    if (!safeAddress.startsWith('0x')) {
+      return BigInt(0);
+    }
+
+    const data = SIG_BALANCE_OF + safeAddress.slice(2).padStart(64, '0');
+    const response = await fetch('https://rpc.gnosis.gateway.fm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_call',
+        params: [{ to: this.config.surgeToken, data }, 'latest']
+      })
+    });
+    const result = await response.json() as { result?: string };
+    return BigInt(result.result || '0');
+  }
+
+  private async checkReputation(safeAddress: string): Promise<boolean> {
+    const balance = await this.getReputation(safeAddress);
+    return balance >= MIN_REPUTATION;
+  }
+
+  private async calculateSurgeScore(agent: string): Promise<number> {
+    // Normalize $SURGE balance to a 0-100 score
+    const SURGE_DECIMALS = 18;
+    const MAX_SCORE = 100;
+    const MIN_SCORE = 1;
+
+    try {
+      // Check if agent is a hex address
+      if (/^0x[a-fA-F0-9]{40}$/.test(agent)) {
+        const balance = await this.getReputation(agent);
+        // Convert to decimal number (1 SURGE = 1e18)
+        const surge = Number(balance) / Math.pow(10, SURGE_DECIMALS);
+        // Log scale: score = 1 + ln(1 + surge) * 20
+        // This gives a score of:
+        // 1 SURGE → ~60
+        // 5 SURGE → ~72
+        // 10 SURGE → ~78
+        // 100 SURGE → ~95
+        return Math.min(MAX_SCORE, Math.max(MIN_SCORE,
+          1 + Math.log(1 + surge) * 20
+        ));
+      }
+    } catch {}
+
+    // Default score for non-hex or failed lookup
+    return MIN_SCORE;
+  }
+
+  private async calculateEventPriority(event: CalendarEvent): Promise<number> {
+    // Get $SURGE scores for all participants
+    const scores = await Promise.all(
+      event.participants.map(agent => this.calculateSurgeScore(agent))
+    );
+
+    // Priority is weighted by:
+    // - Highest participant score (50%)
+    // - Average score (30%)
+    // - Number of participants (20%)
+    const maxScore = Math.max(...scores);
+    const avgScore = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+    const participantBonus = Math.min(100, scores.length * 10); // 10 points per participant up to 100
+
+    return (
+      maxScore * 0.5 +
+      avgScore * 0.3 +
+      participantBonus * 0.2
+    );
+  }
+
+  private async calculateSurgeMetadata(event: CalendarEvent): Promise<SurgeMetadata> {
+    const scores = await Promise.all(
+      event.participants.map(async agent => ({
+        agent,
+        score: await this.calculateSurgeScore(agent)
+      }))
+    );
+
+    return {
+      participantScores: scores,
+      averageScore: scores.reduce((sum, s) => sum + s.score, 0) / scores.length,
+      maxScore: Math.max(...scores.map(s => s.score)),
+      priority: await this.calculateEventPriority(event)
+    };
+  }
+
+  private async getIdentityState(name: string): Promise<IdentityState> {
+    // Hash the name for the registry call
+    const nameBytes = new TextEncoder().encode(name);
+    const hashHex = Array.from(nameBytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    const data = SIG_GET_IDENTITY + hashHex.padStart(64, '0');
+    const response = await fetch('https://rpc.gnosis.gateway.fm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_call',
+        params: [{ to: this.config.ghostRegistry, data }, 'latest']
+      })
+    });
+
+    const result = await response.json() as { result?: string };
+    const stateHex = result.result || '0x0';
+    const state = parseInt(stateHex);
+
+    switch (state) {
+      case 1: return 'AGENT';
+      case 2: return 'HUMAN';
+      default: return 'NONE';
+    }
+  }
+
+  private async pushToSovereignKV(
+    agentName: string,
+    email: EmailData,
+    meta?: Partial<MessageMetadata>
+  ): Promise<Response> {
+    const kv = this.config.inboxKV;
+    if (!kv) {
+      return new Response('KV not configured', { status: 500 });
+    }
+
+    const indexKey = `index:${agentName}`;
+
+    // Store the individual message with a unique key and TTL
+    const msgId = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    const msgKey = `msg:${agentName}:${msgId}`;
+
+    const metadata: MessageMetadata = {
+      isInternal: meta?.isInternal ?? false,
+      isVerified: meta?.isVerified ?? false,
+      channel: meta?.channel ?? 'external',
+      senderAgent: meta?.senderAgent,
+      recipientAgent: meta?.recipientAgent ?? agentName
+    };
+
+    const envelope = {
+      id: msgId,
+      from: email.from,
+      to: email.to,
+      subject: email.subject,
+      content: email.content,
+      timestamp: email.timestamp,
+      receivedAt: Date.now(),
+      ...metadata
+    };
+
+    // Store message with 8-day TTL (auto-decay)
+    await kv.put(msgKey, JSON.stringify(envelope), {
+      expirationTtl: SOVEREIGN_TTL_SECONDS
+    });
+
+    // Update the inbox index (list of message IDs)
+    let index: string[] = [];
+    try {
+      const existing = await kv.get(indexKey);
+      if (existing) {
+        index = JSON.parse(existing);
+      }
+    } catch { /* fresh index */ }
+
+    index.push(msgId);
+    // Trim to max messages (oldest first)
+    if (index.length > MAX_INBOX_MESSAGES) {
+      index = index.slice(-MAX_INBOX_MESSAGES);
+    }
+
+    await kv.put(indexKey, JSON.stringify(index), {
+      expirationTtl: SOVEREIGN_TTL_SECONDS
+    });
+
+    return Response.json({
+      status: 'stored',
+      tier: 'swarm',
+      agent: agentName,
+      messageId: msgId,
+      decayDays: 8,
+      ...metadata
+    });
+  }
+
+  // A2A Ghost-Wire: agent-to-agent direct KV transfer, zero SMTP cost
+  async sendA2A(fromAgent: string, toAgent: string, subject: string, content: string): Promise<Response> {
+    const email: EmailData = {
+      from: `${fromAgent}_@nftmail.box`,
+      to: `${toAgent}_@nftmail.box`,
+      subject,
+      content,
+      timestamp: Date.now()
+    };
+
+    return this.pushToSovereignKV(toAgent, email, {
+      isInternal: true,
+      isVerified: true,
+      channel: 'ghost-wire',
+      senderAgent: fromAgent,
+      recipientAgent: toAgent
+    });
+  }
+
+  async getAgentStatus(agentName: string): Promise<Response> {
+    // Get inbox status
+    const inboxKv = this.config.inboxKV;
+    if (!inboxKv) {
+      return Response.json({ error: 'Inbox KV not configured' }, { status: 500 });
+    }
+
+    const indexKey = `index:${agentName}`;
+    let messages: any[] = [];
+    try {
+      const raw = await inboxKv.get(indexKey);
+      if (raw) {
+        const msgIds = JSON.parse(raw);
+        const fetches = msgIds.slice(-5).map(async (id: string) => {
+          const data = await inboxKv.get(`msg:${agentName}:${id}`);
+          if (data) {
+            try { messages.push(JSON.parse(data)); } catch {}
+          }
+        });
+        await Promise.all(fetches);
+        messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      }
+    } catch {}
+
+    // Get calendar status
+    const calendarKv = this.config.calendarKV;
+    let events: CalendarEvent[] = [];
+    let nextEvent: CalendarEvent | undefined;
+    if (calendarKv) {
+      try {
+        const raw = await calendarKv.get(`events:${agentName}`);
+        if (raw) {
+          const eventIds = JSON.parse(raw);
+          const fetches = eventIds.map(async (id: string) => {
+            const data = await calendarKv.get(`event:${id}`);
+            if (data) {
+              try {
+                const event = JSON.parse(data) as CalendarEvent;
+                if (event.endTime > Date.now()) {
+                  events.push(event);
+                }
+              } catch {}
+            }
+          });
+          await Promise.all(fetches);
+          events.sort((a, b) => a.startTime - b.startTime);
+          nextEvent = events.find(e => 
+            e.status === 'SCHEDULED' && 
+            e.startTime > Date.now()
+          );
+        }
+      } catch {}
+    }
+
+    // Build agent status
+    const lastMessage = messages[0];
+    const now = Date.now();
+    const lastBeat = messages.find(m => 
+      m.subject?.toLowerCase().includes('heartbeat') ||
+      m.type === 'HEARTBEAT'
+    )?.timestamp;
+
+    const status: AgentStatus = {
+      agent: agentName,
+      tier: 'swarm',
+      surgeScore: await this.calculateSurgeScore(agentName),
+      inbox: {
+        count: messages.length,
+        lastMessage: lastMessage ? {
+          id: lastMessage.id,
+          from: lastMessage.from,
+          subject: lastMessage.subject,
+          timestamp: lastMessage.timestamp,
+          isInternal: lastMessage.isInternal || false,
+          isVerified: lastMessage.isVerified || false,
+          channel: lastMessage.channel || 'external'
+        } : undefined
+      },
+      calendar: {
+        count: events.length,
+        nextEvent,
+        upcomingEvents: events.slice(0, 3)
+      },
+      heartbeat: {
+        lastBeat,
+        isActive: lastBeat ? (now - lastBeat) < 24 * 60 * 60 * 1000 : false,
+        nextScheduled: nextEvent?.type === 'HEARTBEAT' ? nextEvent.startTime : undefined
+      }
+    };
+
+    return Response.json(status);
+  }
+
+  async getInbox(agentName: string): Promise<Response> {
+    const kv = this.config.inboxKV;
+    if (!kv) {
+      return Response.json({ error: 'KV not configured' }, { status: 500 });
+    }
+
+    const indexKey = `index:${agentName}`;
+    const raw = await kv.get(indexKey);
+    if (!raw) {
+      return Response.json({ agent: agentName, messages: [], count: 0 });
+    }
+
+    let index: string[];
+    try {
+      index = JSON.parse(raw);
+    } catch {
+      return Response.json({ agent: agentName, messages: [], count: 0 });
+    }
+
+    // Fetch all messages in parallel
+    const messages: any[] = [];
+    const fetches = index.map(async (msgId) => {
+      const msgKey = `msg:${agentName}:${msgId}`;
+      const data = await kv.get(msgKey);
+      if (data) {
+        try { messages.push(JSON.parse(data)); } catch { /* skip corrupt */ }
+      }
+    });
+    await Promise.all(fetches);
+
+    // Sort newest first
+    messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    return Response.json({
+      agent: agentName,
+      tier: 'swarm',
+      messages,
+      count: messages.length,
+      decayDays: 8
+    });
+  }
+
+  async handleAgentMail(localPart: string, email: EmailData): Promise<Response> {
+    const identityName = localPart.slice(0, -1); // Remove trailing _
+
+    // A2A detection: if sender is also an agent (_@nftmail.box), this is Ghost-Wire
+    const a2a = this.isA2A(email);
+    if (a2a) {
+      return this.pushToSovereignKV(identityName, email, {
+        isInternal: true,
+        isVerified: true,
+        channel: 'ghost-wire',
+        senderAgent: a2a.sender,
+        recipientAgent: a2a.recipient
+      });
+    }
+
+    const tier = this.detectTier(localPart);
+
+    // Swarm tier: sovereign KV inbox (zero-cost, 8-day decay)
+    if (tier === 'swarm') {
+      return this.pushToSovereignKV(identityName, email, {
+        isInternal: false,
+        isVerified: false,
+        channel: 'external'
+      });
+    }
+
+    // Executive/Standard tiers: use Zoho
+    const state = await this.getIdentityState(identityName);
+
+    if (state !== 'AGENT') {
+      return new Response('Identity Not Found', { status: 404 });
+    }
+
+    const isHexAddress = /^0x[a-fA-F0-9]{40}$/.test(identityName);
+    if (isHexAddress) {
+      const hasReputation = await this.checkReputation(identityName);
+      if (!hasReputation) {
+        return new Response('Insufficient reputation', { status: 403 });
+      }
+    }
+
+    return new Response('OK', { status: 200 });
+  }
+
+  async storeEmail(localPart: string, email: EmailData): Promise<Response> {
+    if (localPart.endsWith('_')) {
+      return this.handleAgentMail(localPart, email);
+    } else {
+      return new Response('Not implemented', { status: 501 });
+    }
+  }
+}
+
+export default MailStorageAdapter;
