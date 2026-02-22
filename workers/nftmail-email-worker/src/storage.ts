@@ -541,6 +541,40 @@ export class MailStorageAdapter {
     }
   }
 
+  // Sovereign Kill-Switch: purge all inbox data for an agent
+  async purgeInbox(agentName: string): Promise<Response> {
+    const kv = this.config.inboxKV;
+    if (!kv) {
+      return Response.json({ error: 'KV not configured' }, { status: 500 });
+    }
+
+    const indexKey = `index:${agentName}`;
+    const raw = await kv.get(indexKey);
+    let purgedCount = 0;
+
+    if (raw) {
+      let index: string[] = [];
+      try { index = JSON.parse(raw); } catch { /* empty */ }
+
+      // Delete all individual messages
+      const deletes = index.map(async (msgId) => {
+        await kv.delete(`msg:${agentName}:${msgId}`);
+        purgedCount++;
+      });
+      await Promise.all(deletes);
+    }
+
+    // Delete the index itself
+    await kv.delete(indexKey);
+
+    return Response.json({
+      status: 'purged',
+      agent: agentName,
+      messagesDeleted: purgedCount,
+      timestamp: Date.now(),
+    });
+  }
+
   private detectTier(_localPart: string): AgentTier {
     // For MVP: all agent addresses use sovereign KV inbox (swarm tier)
     // Future: check on-chain metadata or registry to determine tier

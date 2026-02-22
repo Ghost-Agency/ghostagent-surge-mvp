@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import MailStorageAdapter, { CalendarInvite } from './storage';
+import { buildDirectMessageTopic, createWakuEnvelope } from './waku';
 
 export interface Env {
   BACKEND: 'KV';
@@ -118,6 +119,33 @@ export default {
             return Response.json({ error: 'Missing fromAgent or toAgent' }, { status: 400 });
           }
           return storage.sendA2A(fromAgent, toAgent, email.subject || '', email.content || '');
+        }
+
+        // Zero-Knowledge Metadata: Waku gossip topic routing
+        if (email.action === 'wakuRoute') {
+          const fromAgent = (email as any).fromAgent || '';
+          const toAgent = (email as any).toAgent || '';
+          if (!fromAgent || !toAgent) {
+            return Response.json({ error: 'Missing fromAgent or toAgent' }, { status: 400 });
+          }
+          const topic = buildDirectMessageTopic(fromAgent, toAgent);
+          const envelope = createWakuEnvelope(fromAgent, toAgent, email.content || '', true);
+          // Store in KV as well for offline retrieval
+          await storage.sendA2A(fromAgent, toAgent, email.subject || '', email.content || '');
+          return Response.json({ topic, envelope, stored: true });
+        }
+
+        // Sovereign Kill-Switch: purge all inbox data for an agent
+        if (email.action === 'purgeInbox') {
+          const agent = email.localPart || email.email?.split('@')[0] || '';
+          const signature = (email as any).signature || '';
+          if (!agent) {
+            return Response.json({ error: 'Missing agent name' }, { status: 400 });
+          }
+          if (!signature) {
+            return Response.json({ error: 'Missing Safe signature — sovereign burn requires owner auth' }, { status: 403 });
+          }
+          return storage.purgeInbox(agent);
         }
 
         const localPart = extractLocalPart(email.to);
