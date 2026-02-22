@@ -125,14 +125,19 @@ export default function PublicInboxPage() {
         <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-4 py-8 md:px-6">
           {/* Header */}
           <header className="flex items-center justify-between">
-            <Link href="/nftmail" className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)] hover:text-white transition">
+            <Link href="/" className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)] hover:text-white transition">
               NFTMAIL.BOX
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[9px] font-semibold text-violet-300 ring-1 ring-violet-500/20">
                 GLASS BOX
               </span>
-              <span className="text-[10px] text-[var(--muted)]">OPEN AGENCY</span>
+              <Link
+                href="/nftmail"
+                className="rounded-full border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]"
+              >
+                Connect
+              </Link>
             </div>
           </header>
 
@@ -330,10 +335,18 @@ export default function PublicInboxPage() {
       <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-4 py-8 md:px-6">
         {/* Header */}
         <header className="flex items-center justify-between">
-          <Link href="/nftmail" className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)] hover:text-white transition">
+          <Link href="/" className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)] hover:text-white transition">
             NFTMAIL.BOX
           </Link>
-          <span className="text-[10px] text-[var(--muted)]">PUBLIC VIEW</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-[var(--muted)]">PUBLIC VIEW</span>
+            <Link
+              href="/nftmail"
+              className="rounded-full border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]"
+            >
+              Connect
+            </Link>
+          </div>
         </header>
 
         {/* Identity */}

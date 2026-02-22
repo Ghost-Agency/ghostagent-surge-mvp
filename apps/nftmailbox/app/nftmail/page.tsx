@@ -25,7 +25,9 @@ export default function NftmailPage() {
           <div className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)]">NFTMAIL.BOX</div>
           <div className="flex items-center gap-3">
             <a
-              href="https://ghostagent.ninja/"
+              href="http://localhost:3000"
+              target="_blank"
+              rel="noopener noreferrer"
               className="rounded-full border border-[var(--border)] bg-black/20 px-4 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
             >
               GhostAgent.ninja
@@ -183,7 +185,9 @@ export default function NftmailPage() {
             </div>
             <div className="ml-7">
               <a
-                href="https://ghostagent.ninja/"
+                href="http://localhost:3000"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="group inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/8 px-5 py-3 text-sm font-semibold text-amber-200 transition-all hover:bg-amber-500/15 hover:shadow-[0_0_24px_rgba(245,158,11,0.1)]"
               >
                 Molt to Agent on GhostAgent.ninja
