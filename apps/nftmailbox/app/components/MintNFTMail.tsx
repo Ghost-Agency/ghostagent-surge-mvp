@@ -1,14 +1,27 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createWalletClient, createPublicClient, custom, http, decodeEventLog } from 'viem';
+import { createWalletClient, createPublicClient, custom, http, decodeEventLog, keccak256, encodePacked, namehash } from 'viem';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { gnosis, GNO_REGISTRARS } from '../utils/chains';
 import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
 
 type MintStep = 'idle' | 'minting' | 'done' | 'error';
 type MintMode = 'gasless' | 'wallet';
+type NameStatus = 'idle' | 'checking' | 'available' | 'taken';
+
+const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
+const NFTMAIL_GNO_NAMEHASH = namehash('nftmail.gno');
+const GNSRegistryABI = [
+  {
+    inputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
+    name: 'owner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
 
 interface MintResult {
   name: string;
@@ -28,6 +41,8 @@ export function MintNFTMail() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [mintMode, setMintMode] = useState<MintMode>('gasless');
+  const [nameStatus, setNameStatus] = useState<NameStatus>('idle');
+  const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const registrar = GNO_REGISTRARS.nftmail;
   const label = name1 && name2 ? `${name1}.${name2}` : '';
@@ -36,6 +51,33 @@ export function MintNFTMail() {
 
   const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
   const anyWallet = wallets[0];
+
+  // Debounced on-chain name availability check
+  useEffect(() => {
+    if (checkTimer.current) clearTimeout(checkTimer.current);
+    if (!label || name1.length < 2 || name2.length < 2) {
+      setNameStatus('idle');
+      return;
+    }
+    setNameStatus('checking');
+    checkTimer.current = setTimeout(async () => {
+      try {
+        const publicClient = createPublicClient({ chain: gnosis, transport: http() });
+        const labelhash = keccak256(encodePacked(['string'], [label]));
+        const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
+        const owner = await publicClient.readContract({
+          address: GNS_REGISTRY,
+          abi: GNSRegistryABI,
+          functionName: 'owner',
+          args: [subnode],
+        });
+        setNameStatus(owner && owner !== '0x0000000000000000000000000000000000000000' ? 'taken' : 'available');
+      } catch {
+        setNameStatus('idle');
+      }
+    }, 500);
+    return () => { if (checkTimer.current) clearTimeout(checkTimer.current); };
+  }, [label, name1, name2]);
 
   // Gasless mint — treasury pays gas, user just needs a connected address
   const mintGasless = useCallback(async () => {
@@ -209,7 +251,18 @@ export function MintNFTMail() {
           </div>
           {label && (
             <div className="mt-2 space-y-1">
-              <p className="text-xs text-[rgb(160,220,255)]">{fullGno} → {fullEmail}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-[rgb(160,220,255)]">{fullGno} → {fullEmail}</p>
+                {nameStatus === 'checking' && (
+                  <span className="text-[10px] text-[var(--muted)] animate-pulse">checking...</span>
+                )}
+                {nameStatus === 'available' && (
+                  <span className="text-[10px] text-emerald-400 font-semibold">✓ available</span>
+                )}
+                {nameStatus === 'taken' && (
+                  <span className="text-[10px] text-red-400 font-semibold">✗ already taken</span>
+                )}
+              </div>
               <p className="text-[10px] text-[var(--muted)]">Self-contained — same TBA, zero dependency on creation.ip</p>
             </div>
           )}
@@ -244,7 +297,7 @@ export function MintNFTMail() {
 
         <button
           onClick={mint}
-          disabled={!label || name1.length < 2 || name2.length < 2 || step === 'minting'}
+          disabled={!label || name1.length < 2 || name2.length < 2 || step === 'minting' || nameStatus === 'taken' || nameStatus === 'checking'}
           className={`flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
             mintMode === 'gasless'
               ? 'border-emerald-500/35 bg-emerald-500/8 text-emerald-300 hover:bg-emerald-500/16 hover:shadow-[0_0_24px_rgba(16,185,129,0.12)]'

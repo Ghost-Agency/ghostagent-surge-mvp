@@ -5,11 +5,26 @@ import {
   http,
   encodeFunctionData,
   decodeEventLog,
+  keccak256,
+  encodePacked,
+  namehash,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { gnosis } from 'viem/chains';
 
 const REGISTRAR = '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as const;
+const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
+const NFTMAIL_GNO_NAMEHASH = namehash('nftmail.gno');
+
+const GNSRegistryABI = [
+  {
+    inputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
+    name: 'owner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
 
 const NamespaceRegistrarABI = [
   {
@@ -133,6 +148,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Treasury wallet low on funds. Please try again later.' },
         { status: 503 }
+      );
+    }
+
+    // Check if name already exists on-chain
+    const labelhash = keccak256(encodePacked(['string'], [label]));
+    const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
+    const existingOwner = await publicClient.readContract({
+      address: GNS_REGISTRY,
+      abi: GNSRegistryABI,
+      functionName: 'owner',
+      args: [subnode],
+    });
+    if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
+      return NextResponse.json(
+        { error: `${label}.nftmail.gno is already minted. Choose a different name.` },
+        { status: 409 }
       );
     }
 

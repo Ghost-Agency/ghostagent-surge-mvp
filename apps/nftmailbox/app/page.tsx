@@ -72,7 +72,7 @@ export default function Home() {
                     setEmailInput(e.target.value.toLowerCase());
                     setError('');
                   }}
-                  placeholder="alice.ops"
+                  placeholder="ghost.agent"
                   className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 pr-28 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)] transition"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--muted)]">
@@ -90,7 +90,7 @@ export default function Home() {
               <p className="mt-2 text-xs text-red-400">{error}</p>
             )}
             <p className="mt-3 text-[10px] text-[var(--muted)]">
-              Try: <button type="button" onClick={() => { setEmailInput('richard.angelo'); }} className="text-[rgb(160,220,255)] hover:underline">richard.angelo</button>
+              Try: <button type="button" onClick={() => { setEmailInput('ghost.agent'); }} className="text-[rgb(160,220,255)] hover:underline">ghost.agent</button>
               {' · '}
               <button type="button" onClick={() => { setEmailInput('agent_molt'); }} className="text-violet-300 hover:underline">agent_molt</button> (Glass Box)
             </p>
@@ -109,7 +109,7 @@ export default function Home() {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center">
             <h2 className="text-sm font-semibold text-white mb-1">New here?</h2>
             <p className="text-xs text-[var(--muted)] mb-4">
-              Mint a free NFTMail address or upgrade to premium with Zoho white-label.
+              Mint a free NFTMail.box inbox address or upgrade to paid for full feature Gnosis wallet and hardened security.
             </p>
             <div className="flex gap-3 justify-center">
               <Link
