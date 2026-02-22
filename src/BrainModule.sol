@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IGnosisSafe } from "./interfaces/IGnosisSafe.sol";
+import { GovernanceTimelock } from "./GovernanceTimelock.sol";
 
 /// @title BrainModule
 /// @notice Safe module that "awakens" an agent:
@@ -38,6 +39,9 @@ contract BrainModule is Ownable {
     /// @notice Total awakened agents
     uint256 public awakenedCount;
 
+    /// @notice Optional governance timelock — if set, suspend/resume must go through it
+    GovernanceTimelock public timelock;
+
     event Awakened(
         string indexed agentName,
         address indexed safe,
@@ -57,6 +61,12 @@ contract BrainModule is Ownable {
     );
 
     constructor() Ownable(msg.sender) {}
+
+    /// @notice Wire the 7-day governance timelock (owner only, one-time)
+    function setTimelock(address _timelock) external onlyOwner {
+        require(address(timelock) == address(0), "Timelock already set");
+        timelock = GovernanceTimelock(payable(_timelock));
+    }
 
     /// @notice Awaken an agent — called after Brain is installed as Safe module
     /// @param agentName The agent name (e.g. "postmaster")
