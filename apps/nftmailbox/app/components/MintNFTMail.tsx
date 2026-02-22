@@ -8,12 +8,14 @@ import { gnosis, GNO_REGISTRARS } from '../utils/chains';
 import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
 
 type MintStep = 'idle' | 'minting' | 'done' | 'error';
+type MintMode = 'gasless' | 'wallet';
 
 interface MintResult {
   name: string;
   email: string;
   tbaAddress: string;
   txHash: string;
+  gasless?: boolean;
 }
 
 export function MintNFTMail() {
@@ -25,6 +27,7 @@ export function MintNFTMail() {
   const [result, setResult] = useState<MintResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [mintMode, setMintMode] = useState<MintMode>('gasless');
 
   const registrar = GNO_REGISTRARS.nftmail;
   const label = name1 && name2 ? `${name1}.${name2}` : '';
@@ -32,8 +35,58 @@ export function MintNFTMail() {
   const fullEmail = label ? `${label}@nftmail.box` : '';
 
   const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
+  const anyWallet = wallets[0];
 
-  const mint = useCallback(async () => {
+  // Gasless mint — treasury pays gas, user just needs a connected address
+  const mintGasless = useCallback(async () => {
+    if (!authenticated || wallets.length === 0) {
+      setError('Connect your wallet first');
+      return;
+    }
+    if (!name1 || name1.length < 2 || !name2 || name2.length < 2) {
+      setError('Both name parts must be at least 2 characters');
+      return;
+    }
+
+    const ownerAddress = (injectedWallet || anyWallet)?.address;
+    if (!ownerAddress) {
+      setError('No wallet address found');
+      return;
+    }
+
+    setStep('minting');
+    setError(null);
+
+    try {
+      const res = await fetch('/api/gasless-mint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, owner: ownerAddress }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Gasless mint failed');
+      }
+
+      setResult({
+        name: label,
+        email: data.email,
+        tbaAddress: data.tbaAddress || '',
+        txHash: data.txHash,
+        gasless: true,
+      });
+      setStep('done');
+      setShowModal(true);
+    } catch (err: any) {
+      setError(err?.message || 'Gasless mint failed');
+      setStep('error');
+    }
+  }, [authenticated, wallets, name1, name2, label, injectedWallet, anyWallet]);
+
+  // Wallet mint — user pays gas with their own xDAI
+  const mintWithWallet = useCallback(async () => {
     if (!authenticated || wallets.length === 0) {
       setError('Connect your wallet first');
       return;
@@ -115,6 +168,8 @@ export function MintNFTMail() {
     }
   }, [authenticated, wallets, name1, name2, registrar, fullEmail, label, injectedWallet]);
 
+  const mint = mintMode === 'gasless' ? mintGasless : mintWithWallet;
+
   if (!authenticated) return null;
 
   return (
@@ -160,12 +215,49 @@ export function MintNFTMail() {
           )}
         </div>
 
+        {/* Mint mode toggle */}
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => setMintMode('gasless')}
+            className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold tracking-wider transition ${
+              mintMode === 'gasless'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                : 'text-[var(--muted)] hover:text-white/60'
+            }`}
+          >
+            FREE MINT
+          </button>
+          <button
+            onClick={() => setMintMode('wallet')}
+            className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold tracking-wider transition ${
+              mintMode === 'wallet'
+                ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)] border border-[rgba(0,163,255,0.35)]'
+                : 'text-[var(--muted)] hover:text-white/60'
+            }`}
+          >
+            PAY GAS
+          </button>
+        </div>
+        {mintMode === 'gasless' && (
+          <p className="text-center text-[10px] text-emerald-300/60">No xDAI needed — gas sponsored by NFTMail treasury</p>
+        )}
+
         <button
           onClick={mint}
           disabled={!label || name1.length < 2 || name2.length < 2 || step === 'minting'}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] px-5 py-3 text-sm font-semibold text-[rgb(160,220,255)] transition-all hover:bg-[rgba(0,163,255,0.16)] hover:shadow-[0_0_24px_rgba(0,163,255,0.12)] disabled:cursor-not-allowed disabled:opacity-40"
+          className={`flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+            mintMode === 'gasless'
+              ? 'border-emerald-500/35 bg-emerald-500/8 text-emerald-300 hover:bg-emerald-500/16 hover:shadow-[0_0_24px_rgba(16,185,129,0.12)]'
+              : 'border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.16)] hover:shadow-[0_0_24px_rgba(0,163,255,0.12)]'
+          }`}
         >
-          {step === 'minting' ? 'Minting on Gnosis...' : step === 'done' ? `Minted — ${fullEmail}` : 'Mint NFTMail Address'}
+          {step === 'minting'
+            ? 'Minting on Gnosis...'
+            : step === 'done'
+            ? `Minted — ${fullEmail}`
+            : mintMode === 'gasless'
+            ? 'Mint Free NFTMail Address'
+            : 'Mint NFTMail Address'}
         </button>
 
         {error && <p className="text-center text-xs text-red-400">{error}</p>}
@@ -189,8 +281,8 @@ export function MintNFTMail() {
               className="mx-4 w-full max-w-md overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
             >
               <div className="relative overflow-hidden bg-gradient-to-r from-[rgba(0,163,255,0.15)] to-emerald-500/15 px-6 py-5">
-                <h3 className="text-lg font-bold text-white">NFTMail Minted</h3>
-                <p className="text-xs text-[var(--muted)]">{result.name} — self-contained identity</p>
+                <h3 className="text-lg font-bold text-white">NFTMail Minted{result.gasless ? ' (Free)' : ''}</h3>
+                <p className="text-xs text-[var(--muted)]">{result.name} — self-contained identity{result.gasless ? ' · gas sponsored' : ''}</p>
               </div>
 
               <div className="space-y-4 px-6 py-5">
