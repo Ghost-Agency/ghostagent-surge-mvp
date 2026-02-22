@@ -167,6 +167,35 @@ export default {
           return corsify(Response.json({ topic, envelope, stored: true }), request);
         }
 
+        // Privacy Toggle: set privacy state for a .gno name
+        if (email.action === 'setPrivacy') {
+          const agent = email.localPart || '';
+          const privacyEnabled = (email as any).privacyEnabled;
+          if (!agent || typeof privacyEnabled !== 'boolean') {
+            return corsify(Response.json({ error: 'Missing localPart or privacyEnabled' }, { status: 400 }), request);
+          }
+          await env.INBOX_KV.put(`privacy:${agent}`, JSON.stringify({ privacyEnabled, updatedAt: Date.now() }));
+          return corsify(Response.json({ status: 'ok', privacyEnabled }), request);
+        }
+
+        // Privacy Toggle: get privacy state for a .gno name
+        if (email.action === 'getPrivacy') {
+          const agent = email.localPart || '';
+          if (!agent) {
+            return corsify(Response.json({ error: 'Missing localPart' }, { status: 400 }), request);
+          }
+          const raw = await env.INBOX_KV.get(`privacy:${agent}`);
+          if (!raw) {
+            return corsify(Response.json({ privacyEnabled: false }), request);
+          }
+          try {
+            const data = JSON.parse(raw);
+            return corsify(Response.json({ privacyEnabled: data.privacyEnabled ?? false }), request);
+          } catch {
+            return corsify(Response.json({ privacyEnabled: false }), request);
+          }
+        }
+
         // Sovereign Kill-Switch: purge all inbox data for an agent
         if (email.action === 'purgeInbox') {
           const agent = email.localPart || email.email?.split('@')[0] || '';

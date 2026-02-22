@@ -5,6 +5,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { WarrantCanary } from '../components/WarrantCanary';
+import { TogglePrivacy } from '../components/TogglePrivacy';
 
 interface NftMailName {
   tokenId: number;
@@ -52,6 +53,9 @@ export default function DashboardPage() {
   // Kill-switch state
   const [burning, setBurning] = useState(false);
   const [burnResult, setBurnResult] = useState<string | null>(null);
+
+  // Privacy toggle state
+  const [privacyEnabled, setPrivacyEnabled] = useState(false);
 
   const preferredWallet = wallets.find((w: any) => w?.walletClientType === 'injected') || wallets[0];
 
@@ -309,6 +313,15 @@ export default function DashboardPage() {
               <span className="text-[10px] text-[var(--muted)]">{selectedName?.gnoName}</span>
             </div>
 
+            {/* Privacy Toggle */}
+            {selectedName && preferredWallet && (
+              <TogglePrivacy
+                name={selectedName.label}
+                walletAddress={preferredWallet.address}
+                onPrivacyChange={setPrivacyEnabled}
+              />
+            )}
+
             {/* Tabs */}
             <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-1">
               <button
@@ -416,7 +429,7 @@ export default function DashboardPage() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
                       transition={{ delay: i * 0.03 }}
-                      className="group rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-[rgba(0,163,255,0.25)]"
+                      className={`group rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-[rgba(0,163,255,0.25)] ${privacyEnabled ? '' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
