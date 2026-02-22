@@ -1,9 +1,11 @@
-import Safe from "@safe-global/protocol-kit";
-import { formatEther, isAddress } from "ethers";
+import { createPublicClient, http, formatEther, isAddress } from "viem";
+import { gnosis } from "viem/chains";
 import { NextResponse } from "next/server";
 
-const GNOSIS_CHAIN_ID = BigInt(100);
-const GNOSIS_RPC_URL = "https://rpc.gnosischain.com";
+const client = createPublicClient({
+  chain: gnosis,
+  transport: http("https://rpc.gnosischain.com"),
+});
 
 export async function GET(request: Request) {
   try {
@@ -22,17 +24,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "safeAddress cannot be the zero address" }, { status: 400 });
     }
 
-    const protocolKit = await Safe.init({
-      provider: GNOSIS_RPC_URL,
-      safeAddress,
+    const balanceWei = await client.getBalance({
+      address: safeAddress as `0x${string}`,
     });
-
-    const balanceWei = await protocolKit.getBalance();
     const balanceXdai = formatEther(balanceWei);
 
     return NextResponse.json({
       safeAddress,
-      chainId: Number(GNOSIS_CHAIN_ID),
+      chainId: 100,
       balanceWei: balanceWei.toString(),
       balanceXdai,
     });

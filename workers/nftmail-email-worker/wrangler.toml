@@ -3,11 +3,20 @@ main = "src/index.ts"
 compatibility_date = "2026-02-15"
 
 [vars]
-GNOSIS_RPC_URL = "https://rpc.gnosischain.com"
-GHOSTAGENT_REGISTRY_ADDRESS = "0x73F2F2EF73dC512Cac0f5B0372F1d58A84eD13E6"
-FORWARD_ENDPOINT = "https://webhook.site/7f94bff7-edc7-403d-a80d-5303f2006c7e"
+BACKEND = "KV"
+SURGE_TOKEN = "0xFc0d6D124dF2bF30c070D0965cf4E575AE0117c7"
+GHOST_REGISTRY = "0x73F2d7f43B3aa98D434F53e921d3A41aa570bE13"
 
-# Optional: shared secret for your forward endpoint
-FORWARD_BEARER_TOKEN = ""
+[[kv_namespaces]]
+binding = "INBOX_KV"
+id = "d2177071c3fb4c48a1a22b36ee1a1baf"
+
+[[kv_namespaces]]
+binding = "GHOST_CALENDAR"
+id = "124768a09cbb48d08bb0a1893f3d2003"
 
 # Cloudflare Email Routing will invoke the email handler.
+
+# Trigger the cleanup function every hour
+[triggers]
+crons = ["0 * * * *"]

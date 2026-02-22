@@ -1,0 +1,61 @@
+[
+  {
+    "inputs": [
+      { "internalType": "string", "name": "name", "type": "string" },
+      { "internalType": "address", "name": "tbaAddress", "type": "address" }
+    ],
+    "name": "mintSubdomain",
+    "outputs": [
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "internalType": "address", "name": "ipAccount", "type": "address" }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "string", "name": "name", "type": "string" }],
+    "name": "lookup",
+    "outputs": [
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "internalType": "string", "name": "fullDomain", "type": "string" },
+      { "internalType": "address", "name": "tba", "type": "address" },
+      { "internalType": "address", "name": "ipAccount", "type": "address" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "address", "name": "tba", "type": "address" }],
+    "name": "lookupByTba",
+    "outputs": [
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "internalType": "string", "name": "name", "type": "string" },
+      { "internalType": "string", "name": "fullDomain", "type": "string" },
+      { "internalType": "address", "name": "ipAccount", "type": "address" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "indexed": false, "internalType": "string", "name": "name", "type": "string" },
+      { "indexed": false, "internalType": "string", "name": "fullDomain", "type": "string" },
+      { "indexed": true, "internalType": "address", "name": "tba", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "owner", "type": "address" }
+    ],
+    "name": "SubdomainMinted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "ipAccount", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "tba", "type": "address" }
+    ],
+    "name": "IpAssetRegistered",
+    "type": "event"
+  }
+]

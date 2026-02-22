@@ -110,11 +110,10 @@ contract GhostRegistry is ERC721, Ownable {
         // 2. Create TBA for the NFT
         address tba = erc6551Registry.createAccount(
             erc6551Implementation,
+            bytes32(0),
             chainId,
             address(this),
-            tokenId,
-            0,
-            ""
+            tokenId
         );
         accountOf[tokenId] = tba;
         safeOf[tokenId] = safe;
@@ -152,11 +151,10 @@ contract GhostRegistry is ERC721, Ownable {
         // Create new TBA for the NFT
         address newTba = erc6551Registry.createAccount(
             erc6551Implementation,
+            bytes32(block.timestamp),  // use timestamp as salt for uniqueness
             chainId,
             address(this),
-            tokenId,
-            block.timestamp,  // use timestamp as salt for uniqueness
-            ""
+            tokenId
         );
         accountOf[tokenId] = newTba;
 

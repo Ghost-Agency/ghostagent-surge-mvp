@@ -1,27 +1,13 @@
-import { ethers } from 'ethers';
-import Safe from '@safe-global/safe-core-sdk';
-import { EthersAdapter } from '@safe-global/safe-ethers-lib';
-import type { SafeAccountConfig } from '@safe-global/safe-core-sdk-types';
+import { createPublicClient, http } from 'viem';
+import { gnosis } from 'viem/chains';
 
-const SAFE_FACTORY = process.env.NEXT_PUBLIC_SAFE_FACTORY!;
+const client = createPublicClient({
+  chain: gnosis,
+  transport: http('https://rpc.gnosischain.com'),
+});
 
-export async function deploySafe(owner: string, provider: ethers.Provider) {
-  const signer = new ethers.Wallet(ethers.Wallet.createRandom().privateKey, provider);
-  const ethAdapter = new EthersAdapter({
-    ethers,
-    signerOrProvider: signer
-  });
-
-  const safeFactory = await Safe.create({
-    ethAdapter,
-    predictedSafe: {
-      safeAccountConfig: {
-        owners: [owner],
-        threshold: 1
-      }
-    }
-  });
-
-  const safeAddress = await safeFactory.getAddress();
-  return safeAddress;
+// Placeholder — Safe deployment is handled by GhostRegistry.register() on-chain.
+// This utility is kept for future programmatic Safe queries.
+export async function getSafeBalance(safeAddress: `0x${string}`) {
+  return client.getBalance({ address: safeAddress });
 }

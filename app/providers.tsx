@@ -3,7 +3,7 @@
 import { PrivyProvider } from '@privy-io/react-auth';
 import { PropsWithChildren } from 'react';
 
-const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
 
 const GNOSIS_CHAIN = {
   id: 100,
@@ -54,11 +54,15 @@ export function Providers({ children }: PropsWithChildren) {
     <PrivyProvider
       appId={PRIVY_APP_ID!}
       config={{
-        loginMethods: ['email', 'google', 'twitter'],
+        loginMethods: ['wallet', 'email', 'google', 'twitter'],
         appearance: {
           theme: 'dark',
           accentColor: '#00A3FF',
-          showWalletLoginFirst: false,
+          showWalletLoginFirst: true,
+        },
+        embeddedWallets: {
+          createOnLogin: 'users-without-wallets',
+          noPromptOnSignature: false,
         },
         defaultChain: GNOSIS_CHAIN, // Gnosis Chain
         supportedChains: [GNOSIS_CHAIN], // Gnosis only for MVP

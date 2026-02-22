@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { GNO_REGISTRARS } from '../utils/chains';
 
-type Namespace = 'agent' | 'openclaw' | 'molt' | 'picoclaw' | 'vault';
+type Namespace = 'agent' | 'openclaw' | 'molt' | 'picoclaw' | 'vault' | 'nftmail';
 
 const TIERS: Record<Namespace, { title: string; description: string; domain: string; features: string[] }> = {
   agent: {
@@ -60,19 +60,25 @@ const TIERS: Record<Namespace, { title: string; description: string; domain: str
       'Multi-sig compatibility',
       'Automated rebalancing'
     ]
+  },
+  nftmail: {
+    title: 'NFT Mail',
+    description: 'Sovereign email identity for agent-to-agent and human-to-agent messaging. The backbone of the GhostAgent communication layer — every _@nftmail.box address routes through this namespace.',
+    domain: 'nftmail.gno',
+    features: [
+      'Sovereign _@nftmail.box routing',
+      'A2A Ghost-Wire messaging',
+      'Zero-SMTP agent comms',
+      'KV-backed inbox with TTL'
+    ]
   }
 };
 
-const registrarByNamespace: Record<Namespace, string> = {
-  agent: process.env.NEXT_PUBLIC_REGISTRAR_AGENT ?? '0x0000000000000000000000000000000000000000',
-  openclaw: process.env.NEXT_PUBLIC_REGISTRAR_OPENCLAW ?? '0x0000000000000000000000000000000000000000',
-  molt: process.env.NEXT_PUBLIC_REGISTRAR_MOLT ?? '0x0000000000000000000000000000000000000000',
-  picoclaw: process.env.NEXT_PUBLIC_REGISTRAR_PICOCLAW ?? '0x0000000000000000000000000000000000000000',
-  vault: process.env.NEXT_PUBLIC_REGISTRAR_VAULT ?? '0x0000000000000000000000000000000000000000'
-};
+const registrarByNamespace: Record<Namespace, string> = GNO_REGISTRARS;
 
-export function NamespaceSelect() {
-  const [namespace, setNamespace] = useState<Namespace>('openclaw');
+export type { Namespace };
+
+export function NamespaceSelect({ namespace, onSelect }: { namespace: Namespace; onSelect: (ns: Namespace) => void }) {
   const activeRegistrar = registrarByNamespace[namespace];
   const selectedTier = TIERS[namespace];
 
@@ -87,7 +93,7 @@ export function NamespaceSelect() {
           return (
             <button
               key={key}
-              onClick={() => setNamespace(key)}
+              onClick={() => onSelect(key)}
               className={`group flex flex-col gap-3 rounded-xl border p-4 text-left transition ${isSelected ? 'border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.12)]' : 'border-[var(--border)] bg-black/30 hover:border-[rgba(0,163,255,0.22)] hover:bg-[rgba(0,163,255,0.08)]'}`}
             >
               <div className="flex items-start justify-between gap-3">

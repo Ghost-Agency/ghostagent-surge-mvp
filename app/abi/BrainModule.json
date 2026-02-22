@@ -1,0 +1,55 @@
+[
+  {
+    "inputs": [
+      { "internalType": "string", "name": "agentName", "type": "string" },
+      { "internalType": "address", "name": "safe", "type": "address" },
+      { "internalType": "address", "name": "tba", "type": "address" }
+    ],
+    "name": "awaken",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "string", "name": "agentName", "type": "string" }],
+    "name": "isAwakened",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "string", "name": "agentName", "type": "string" }],
+    "name": "getBrain",
+    "outputs": [
+      { "internalType": "address", "name": "safe", "type": "address" },
+      { "internalType": "address", "name": "tba", "type": "address" },
+      { "internalType": "uint8", "name": "state", "type": "uint8" },
+      { "internalType": "uint256", "name": "awakenedAt", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "string", "name": "agentName", "type": "string" },
+      { "internalType": "address", "name": "to", "type": "address" },
+      { "internalType": "uint256", "name": "value", "type": "uint256" },
+      { "internalType": "bytes", "name": "data", "type": "bytes" }
+    ],
+    "name": "execute",
+    "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "string", "name": "agentName", "type": "string" },
+      { "indexed": true, "internalType": "address", "name": "safe", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "tba", "type": "address" },
+      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "name": "Awakened",
+    "type": "event"
+  }
+]

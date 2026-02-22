@@ -51,8 +51,7 @@ abstract contract BaseRegistrar is ERC721 {
         string calldata label,
         address owner,
         bytes calldata storyData,
-        uint256 tbaSalt,
-        bytes calldata tbaInitData
+        bytes32 tbaSalt
     ) external virtual returns (uint256 tokenId, bytes32 subnode, bytes32 ipaId, address tba) {
         tokenId = nextTokenId++;
         _safeMint(owner, tokenId);
@@ -68,11 +67,10 @@ abstract contract BaseRegistrar is ERC721 {
 
         tba = erc6551Registry.createAccount(
             erc6551AccountImplementation,
+            tbaSalt,
             chainId,
             address(this),
-            tokenId,
-            tbaSalt,
-            tbaInitData
+            tokenId
         );
         emit TokenboundAccountCreated(tba, address(this), tokenId);
     }
