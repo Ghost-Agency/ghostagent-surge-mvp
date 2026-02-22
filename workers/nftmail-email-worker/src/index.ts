@@ -38,9 +38,9 @@ function extractLocalPart(email: string): string | null {
 
 // Open Agency: TLD-based privacy classification
 // molt.gno = Glass Box (public audit log, no encryption)
-// vault.gno / gno = Black Box (private, encrypted)
+// agent.gno, openclaw.gno, picoclaw.gno, vault.gno, nftmail.gno = Black Box (private, encrypted, sovereign)
 const PUBLIC_TLDS = ['molt.gno'];
-const PRIVATE_TLDS = ['vault.gno', 'gno', 'nftmail.gno'];
+const PRIVATE_TLDS = ['agent.gno', 'openclaw.gno', 'picoclaw.gno', 'vault.gno', 'nftmail.gno'];
 
 function isPublicAgent(agentName: string, parentTld?: string): boolean {
   if (parentTld) return PUBLIC_TLDS.some(t => parentTld.endsWith(t));
