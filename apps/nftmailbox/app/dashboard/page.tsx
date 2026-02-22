@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { WarrantCanary } from '../components/WarrantCanary';
 import { TogglePrivacy } from '../components/TogglePrivacy';
+import { MoltToPrivate } from '../components/MoltToPrivate';
 
 interface NftMailName {
   tokenId: number;
@@ -319,6 +320,15 @@ export default function DashboardPage() {
                 name={selectedName.label}
                 walletAddress={preferredWallet.address}
                 onPrivacyChange={setPrivacyEnabled}
+              />
+            )}
+
+            {/* Open Agency: Molt to Private (only for molt.gno agents) */}
+            {selectedName && preferredWallet && (
+              <MoltToPrivate
+                name={selectedName.label}
+                walletAddress={preferredWallet.address}
+                onMolted={() => setPrivacyEnabled(true)}
               />
             )}
 

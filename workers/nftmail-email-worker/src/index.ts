@@ -36,6 +36,51 @@ function extractLocalPart(email: string): string | null {
   return match ? match[1] : null;
 }
 
+// Open Agency: TLD-based privacy classification
+// molt.gno = Glass Box (public audit log, no encryption)
+// vault.gno / gno = Black Box (private, encrypted)
+const PUBLIC_TLDS = ['molt.gno'];
+const PRIVATE_TLDS = ['vault.gno', 'gno', 'nftmail.gno'];
+
+function isPublicAgent(agentName: string, parentTld?: string): boolean {
+  if (parentTld) return PUBLIC_TLDS.some(t => parentTld.endsWith(t));
+  // Convention: agents ending with _molt are molt.gno agents
+  return agentName.endsWith('_molt');
+}
+
+function getAgentTld(agentName: string, parentTld?: string): string {
+  if (parentTld) return parentTld;
+  if (agentName.endsWith('_molt')) return 'molt.gno';
+  if (agentName.endsWith('_vault')) return 'vault.gno';
+  return 'nftmail.gno';
+}
+
+interface AuditEntry {
+  id: string;
+  from: string;
+  to: string;
+  subject: string;
+  content: string;
+  timestamp: number;
+  contentHash: string;
+  verified: boolean;
+}
+
+interface MoltTransition {
+  agent: string;
+  fromTld: string;
+  toTld: string;
+  block: number;
+  timestamp: number;
+  status: string;
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 function corsHeaders(request: Request): Headers {
   const origin = request.headers.get('Origin') || '*';
   return new Headers({
@@ -196,6 +241,61 @@ export default {
           }
         }
 
+        // Open Agency: resolve agent TLD and public status
+        if (email.action === 'getAgentTLD') {
+          const agent = email.localPart || '';
+          const parentTld = (email as any).parentTld || '';
+          if (!agent) {
+            return corsify(Response.json({ error: 'Missing localPart' }, { status: 400 }), request);
+          }
+          const tld = getAgentTld(agent, parentTld);
+          const isPublic = isPublicAgent(agent, parentTld);
+          return corsify(Response.json({ agent, tld, isPublic, classification: isPublic ? 'Glass Box' : 'Black Box' }), request);
+        }
+
+        // Open Agency: get public audit log for a molt.gno agent
+        if (email.action === 'getPublicAuditLog') {
+          const agent = email.localPart || '';
+          if (!agent) {
+            return corsify(Response.json({ error: 'Missing localPart' }, { status: 400 }), request);
+          }
+          const raw = await env.INBOX_KV.get(`audit:${agent}`);
+          const entries: AuditEntry[] = raw ? JSON.parse(raw) : [];
+          // Also get molt transitions
+          const transRaw = await env.INBOX_KV.get(`molt-log:${agent}`);
+          const transitions: MoltTransition[] = transRaw ? JSON.parse(transRaw) : [];
+          return corsify(Response.json({ agent, isPublic: isPublicAgent(agent), entries, transitions }), request);
+        }
+
+        // Open Agency: Molt to Private — transition agent from molt.gno to vault.gno
+        if (email.action === 'moltToPrivate') {
+          const agent = email.localPart || '';
+          const signature = (email as any).signature || '';
+          const newTld = (email as any).newTld || 'vault.gno';
+          if (!agent) {
+            return corsify(Response.json({ error: 'Missing agent name' }, { status: 400 }), request);
+          }
+          if (!signature) {
+            return corsify(Response.json({ error: 'Missing Safe signature — molt transition requires owner auth' }, { status: 403 }), request);
+          }
+          // Record the molt transition
+          const transition: MoltTransition = {
+            agent,
+            fromTld: getAgentTld(agent),
+            toTld: newTld,
+            block: Date.now(), // placeholder — real impl reads on-chain block
+            timestamp: Date.now(),
+            status: `Public Audit Log Terminated. Agent is now Sovereign.`,
+          };
+          const transRaw = await env.INBOX_KV.get(`molt-log:${agent}`);
+          const transitions: MoltTransition[] = transRaw ? JSON.parse(transRaw) : [];
+          transitions.push(transition);
+          await env.INBOX_KV.put(`molt-log:${agent}`, JSON.stringify(transitions));
+          // Flip privacy to enabled (Black Box)
+          await env.INBOX_KV.put(`privacy:${agent}`, JSON.stringify({ privacyEnabled: true, updatedAt: Date.now(), molted: true }));
+          return corsify(Response.json({ status: 'molted', transition }), request);
+        }
+
         // Sovereign Kill-Switch: purge all inbox data for an agent
         if (email.action === 'purgeInbox') {
           const agent = email.localPart || email.email?.split('@')[0] || '';
@@ -216,13 +316,35 @@ export default {
           return corsify(new Response('Invalid email format', { status: 400 }), request);
         }
 
-        result = await storage.storeEmail(localPart, {
+        // Store email — and dual-write to public audit log for molt.gno agents
+        const emailPayload = {
           from: email.from,
           to: email.to,
           subject: email.subject,
           content: email.content,
           timestamp: Date.now()
-        });
+        };
+        result = await storage.storeEmail(localPart, emailPayload);
+
+        // Glass Box: if this is a molt.gno agent, append to public audit log
+        if (isPublicAgent(localPart)) {
+          const contentHash = await sha256Hex(JSON.stringify(emailPayload));
+          const entry: AuditEntry = {
+            id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            from: email.from,
+            to: email.to,
+            subject: email.subject,
+            content: email.content,
+            timestamp: emailPayload.timestamp,
+            contentHash,
+            verified: true,
+          };
+          const auditRaw = await env.INBOX_KV.get(`audit:${localPart}`);
+          const auditLog: AuditEntry[] = auditRaw ? JSON.parse(auditRaw) : [];
+          auditLog.push(entry);
+          await env.INBOX_KV.put(`audit:${localPart}`, JSON.stringify(auditLog));
+        }
+
         return corsify(result, request);
       }
       return corsify(new Response('Method not allowed', { status: 405 }), request);
