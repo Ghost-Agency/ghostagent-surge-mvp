@@ -64,7 +64,65 @@ interface AuditEntry {
   timestamp: number;
   contentHash: string;
   verified: boolean;
+  redacted?: boolean;
+  redactionReason?: string;
 }
+
+// Sensitive Redaction: edge-detect OTP/auth signals for Glass Box agents
+// "Transparency of Action, Privacy of Secret"
+const SENSITIVE_SENDERS = [
+  'no-reply@', 'noreply@', 'security@', 'auth@', 'verify@', 'account@',
+  'coinbase.com', 'binance.com', 'kraken.com', 'gemini.com', 'stripe.com',
+  'paypal.com', 'revolut.com', 'wise.com', 'metamask.io', 'ledger.com',
+  'fireblocks.com', 'gnosis-safe.io', 'safe.global',
+];
+
+const SENSITIVE_KEYWORDS = [
+  'otp', 'one-time password', 'one-time code', 'verification code',
+  'verify your', 'confirm your', 'security code', 'authentication code',
+  '2fa', 'two-factor', 'login code', 'sign-in code', 'access code',
+  'reset your password', 'password reset', 'confirm transaction',
+  'approve this', 'authorize this', 'withdrawal confirmation',
+];
+
+const OTP_PATTERN = /\b\d{4,8}\b/;
+
+function isSensitiveContent(from: string, subject: string, content: string): { sensitive: boolean; reason: string } {
+  const fromLower = from.toLowerCase();
+  const subjectLower = subject.toLowerCase();
+  const contentLower = content.toLowerCase();
+
+  // Check sender
+  for (const s of SENSITIVE_SENDERS) {
+    if (fromLower.includes(s)) {
+      return { sensitive: true, reason: `Auth sender detected: ${s}` };
+    }
+  }
+
+  // Check subject for keywords
+  for (const kw of SENSITIVE_KEYWORDS) {
+    if (subjectLower.includes(kw)) {
+      return { sensitive: true, reason: `Auth keyword in subject: "${kw}"` };
+    }
+  }
+
+  // Check content for keywords + OTP pattern
+  for (const kw of SENSITIVE_KEYWORDS) {
+    if (contentLower.includes(kw)) {
+      return { sensitive: true, reason: `Auth keyword in body: "${kw}"` };
+    }
+  }
+
+  // Check for standalone numeric codes (likely OTP)
+  if (OTP_PATTERN.test(content) && (subjectLower.includes('code') || subjectLower.includes('verify') || contentLower.includes('code') || contentLower.includes('enter'))) {
+    return { sensitive: true, reason: 'Numeric code pattern detected with auth context' };
+  }
+
+  return { sensitive: false, reason: '' };
+}
+
+const REDACTED_BODY = '[AUTHENTICATION SIGNAL RECEIVED - REDACTED FOR SECURITY]\n\nThis message contained sensitive authentication data (OTP, verification code, or security token).\nThe cleartext has been routed to the agent\'s private Stealth layer.\nThe SHA-256 content hash below proves the original message integrity.';
+const REDACTED_SUBJECT_PREFIX = '[REDACTED] ';
 
 interface MoltTransition {
   agent: string;
@@ -327,22 +385,45 @@ export default {
         result = await storage.storeEmail(localPart, emailPayload);
 
         // Glass Box: if this is a molt.gno agent, append to public audit log
+        // with Sensitive Redaction for OTP/auth signals
         if (isPublicAgent(localPart)) {
           const contentHash = await sha256Hex(JSON.stringify(emailPayload));
+          const sensitivity = isSensitiveContent(email.from, email.subject, email.content);
+
           const entry: AuditEntry = {
             id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            from: email.from,
+            from: sensitivity.sensitive ? email.from : email.from,
             to: email.to,
-            subject: email.subject,
-            content: email.content,
+            subject: sensitivity.sensitive ? REDACTED_SUBJECT_PREFIX + 'Authentication Signal' : email.subject,
+            content: sensitivity.sensitive ? REDACTED_BODY : email.content,
             timestamp: emailPayload.timestamp,
             contentHash,
             verified: true,
+            redacted: sensitivity.sensitive,
+            redactionReason: sensitivity.sensitive ? sensitivity.reason : undefined,
           };
           const auditRaw = await env.INBOX_KV.get(`audit:${localPart}`);
           const auditLog: AuditEntry[] = auditRaw ? JSON.parse(auditRaw) : [];
           auditLog.push(entry);
           await env.INBOX_KV.put(`audit:${localPart}`, JSON.stringify(auditLog));
+
+          // If sensitive, store cleartext in private Stealth layer (only accessible by agent owner)
+          if (sensitivity.sensitive) {
+            const stealthEntry = {
+              id: entry.id,
+              from: email.from,
+              to: email.to,
+              subject: email.subject,
+              content: email.content,
+              timestamp: emailPayload.timestamp,
+              contentHash,
+              redactionReason: sensitivity.reason,
+            };
+            const stealthRaw = await env.INBOX_KV.get(`stealth:${localPart}`);
+            const stealthLog = stealthRaw ? JSON.parse(stealthRaw) : [];
+            stealthLog.push(stealthEntry);
+            await env.INBOX_KV.put(`stealth:${localPart}`, JSON.stringify(stealthLog));
+          }
         }
 
         return corsify(result, request);

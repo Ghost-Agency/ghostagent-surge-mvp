@@ -20,6 +20,8 @@ interface AuditEntry {
   timestamp: number;
   contentHash: string;
   verified: boolean;
+  redacted?: boolean;
+  redactionReason?: string;
 }
 
 interface MoltTransition {
@@ -200,17 +202,32 @@ export default function PublicInboxPage() {
               {auditEntries.slice().reverse().map((entry) => (
                 <div
                   key={entry.id}
-                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2"
+                  className={`rounded-xl border p-4 space-y-2 ${
+                    entry.redacted
+                      ? 'border-amber-500/25 bg-amber-500/5'
+                      : 'border-[var(--border)] bg-[var(--card)]'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        {entry.verified && (
+                        {entry.redacted ? (
+                          <svg className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                          </svg>
+                        ) : entry.verified ? (
                           <svg className="h-3 w-3 text-emerald-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
+                        ) : null}
+                        <span className={`truncate text-sm font-medium ${entry.redacted ? 'text-amber-300' : 'text-white'}`}>
+                          {entry.subject || '(no subject)'}
+                        </span>
+                        {entry.redacted && (
+                          <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-semibold text-amber-300 ring-1 ring-amber-500/20">
+                            REDACTED
+                          </span>
                         )}
-                        <span className="truncate text-sm font-medium text-white">{entry.subject || '(no subject)'}</span>
                       </div>
                       <p className="mt-0.5 text-xs text-[var(--muted)]">
                         From: <span className="text-white/70">{entry.from}</span>
@@ -224,18 +241,34 @@ export default function PublicInboxPage() {
                     </span>
                   </div>
                   {entry.content && (
-                    <div className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2">
-                      <pre className="text-[11px] text-[var(--muted)] whitespace-pre-wrap break-words font-mono">
+                    <div className={`rounded-lg border px-3 py-2 ${
+                      entry.redacted
+                        ? 'border-amber-500/15 bg-amber-900/10'
+                        : 'border-[var(--border)] bg-black/20'
+                    }`}>
+                      <pre className={`text-[11px] whitespace-pre-wrap break-words font-mono ${
+                        entry.redacted ? 'text-amber-300/80' : 'text-[var(--muted)]'
+                      }`}>
                         {entry.content}
                       </pre>
                     </div>
                   )}
+                  {entry.redacted && entry.redactionReason && (
+                    <p className="text-[9px] text-amber-400/60">
+                      Redaction trigger: {entry.redactionReason}
+                    </p>
+                  )}
                   <div className="flex items-center gap-2">
                     <span className="text-[9px] text-[var(--muted)]">Content Hash:</span>
                     <code className="text-[9px] font-mono text-violet-300/70 truncate">{entry.contentHash}</code>
-                    {entry.verified && (
+                    {entry.verified && !entry.redacted && (
                       <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[8px] text-emerald-300 ring-1 ring-emerald-500/20">
                         VERIFIED
+                      </span>
+                    )}
+                    {entry.redacted && (
+                      <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[8px] text-amber-300 ring-1 ring-amber-500/20">
+                        STEALTH ROUTED
                       </span>
                     )}
                   </div>
