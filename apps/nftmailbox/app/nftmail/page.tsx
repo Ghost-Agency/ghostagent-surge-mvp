@@ -12,6 +12,7 @@ type Tier = 'none' | 'free' | 'pro';
 
 const TREASURY = '0xb7e493e3d226f8fE722CC9916fF164B793af13F4';
 const TIER_XDAI: Record<string, number> = { lite: 10, pro: 24 };
+const TIER_EURE: Record<string, number> = { lite: 10, pro: 22 };
 
 // ─── Tier Upgrade Panel ───
 function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: string }) {
@@ -23,9 +24,12 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<'address' | 'amount' | null>(null);
+  const [paymentToken, setPaymentToken] = useState<'xdai' | 'eure'>('xdai');
+  const [showGnosisPayTooltip, setShowGnosisPayTooltip] = useState(false);
 
   const ownerWallet = user?.wallet?.address || '';
   const xdaiAmount = TIER_XDAI[selectedTier];
+  const eureAmount = TIER_EURE[selectedTier];
 
   const copyToClipboard = async (text: string, key: 'address' | 'amount') => {
     await navigator.clipboard.writeText(text);
@@ -44,7 +48,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
       const res = await fetch('/api/upgrade-tier', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, ownerWallet, newTier: selectedTier === 'pro' ? 'premium' : selectedTier, paymentTxHash: hash }),
+        body: JSON.stringify({ label, ownerWallet, newTier: selectedTier === 'pro' ? 'premium' : selectedTier, paymentTxHash: hash, paymentToken }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upgrade failed');
@@ -54,7 +58,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
     } finally {
       setUpgrading(false);
     }
-  }, [label, ownerWallet, selectedTier, txHash]);
+  }, [label, ownerWallet, selectedTier, txHash, paymentToken]);
 
   if (result) {
     return (
@@ -132,11 +136,50 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
         </button>
       </div>
 
+      {/* Payment method toggle */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">PAYMENT METHOD</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPaymentToken('xdai')}
+            className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+              paymentToken === 'xdai'
+                ? 'border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.1)] text-[rgb(160,220,255)]'
+                : 'border-[var(--border)] bg-black/20 text-[var(--muted)] hover:border-white/20'
+            }`}
+          >
+            xDAI (native)
+          </button>
+          <div className="relative flex-1">
+            <button
+              onClick={() => setPaymentToken('eure')}
+              onMouseEnter={() => setShowGnosisPayTooltip(true)}
+              onMouseLeave={() => setShowGnosisPayTooltip(false)}
+              className={`w-full rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                paymentToken === 'eure'
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                  : 'border-[var(--border)] bg-black/20 text-[var(--muted)] hover:border-emerald-500/30'
+              }`}
+            >
+              Gnosis Pay / EURe
+            </button>
+            {showGnosisPayTooltip && (
+              <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-emerald-500/20 bg-[#0a1a12] px-3 py-2 text-[10px] text-emerald-200/80 shadow-xl z-10">
+                Surveillance-proof fiat-to-xDAI bridge. Your card, your Safe, your Sovereignty.
+                <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-emerald-500/20" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Payment instructions */}
       <div className={`rounded-xl border p-4 space-y-4 ${selectedTier === 'pro' ? 'border-violet-500/20 bg-violet-500/5' : 'border-amber-500/20 bg-amber-500/5'}`}>
         <div className="flex items-center gap-2">
           <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedTier === 'pro' ? 'bg-violet-500/20 text-violet-300' : 'bg-amber-500/20 text-amber-300'}`}>1</div>
-          <span className="text-xs font-semibold text-white">Send xDAI on Gnosis Chain</span>
+          <span className="text-xs font-semibold text-white">
+            {paymentToken === 'eure' ? 'Send EURe via Gnosis Pay on Gnosis Chain' : 'Send xDAI on Gnosis Chain'}
+          </span>
         </div>
 
         {/* Amount */}
@@ -144,10 +187,10 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
           <p className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">EXACT AMOUNT</p>
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2">
             <code className={`flex-1 text-sm font-bold ${selectedTier === 'pro' ? 'text-violet-300' : 'text-amber-300'}`}>
-              {xdaiAmount}.0 xDAI
+              {paymentToken === 'eure' ? `${eureAmount}.00 EURe` : `${xdaiAmount}.0 xDAI`}
             </code>
             <button
-              onClick={() => copyToClipboard(`${xdaiAmount}.0`, 'amount')}
+              onClick={() => copyToClipboard(paymentToken === 'eure' ? `${eureAmount}.00` : `${xdaiAmount}.0`, 'amount')}
               className="text-[10px] text-[var(--muted)] hover:text-white transition px-2 py-0.5 rounded border border-[var(--border)] hover:border-white/20"
             >
               {copied === 'amount' ? '✓ copied' : 'copy'}
@@ -167,7 +210,11 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
               {copied === 'address' ? '✓ copied' : 'copy'}
             </button>
           </div>
-          <p className="text-[10px] text-[var(--muted)]">Chain: Gnosis (Chain ID 100) · Token: xDAI (native)</p>
+          <p className="text-[10px] text-[var(--muted)]">
+            {paymentToken === 'eure'
+              ? 'Chain: Gnosis (Chain ID 100) · Token: EURe (0xcB444e90D8198415266c6a2724b7900fb12FC56E)'
+              : 'Chain: Gnosis (Chain ID 100) · Token: xDAI (native)'}
+          </p>
         </div>
 
         {/* Gnosisscan link */}

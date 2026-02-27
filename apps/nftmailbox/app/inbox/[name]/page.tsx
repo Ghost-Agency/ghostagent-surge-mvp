@@ -1037,53 +1037,46 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Decay countdown: basic tier ── */}
-        {daysLeft !== null && accountTier === 'basic' && (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-medium text-amber-300">
-                {daysLeft > 0 ? `Basic inbox expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}` : 'Basic inbox expiring today'}
+        {/* ── Evolve panel: shown to owner on basic/lite tier ── */}
+        {isOwner && (accountTier === 'basic' || accountTier === 'lite') && (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              <p className="text-sm font-semibold text-white">
+                {accountTier === 'basic' ? 'You are a Larva.' : 'You are a Pupa.'}
               </p>
-              <p className="text-[10px] text-[var(--muted)]">Upgrade to Lite for sending, Safe body &amp; extended account</p>
+              <span className="ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-amber-500/10 text-amber-300 ring-amber-500/20">
+                {accountTier === 'basic' ? 'LARVA' : 'PUPA'}
+              </span>
             </div>
-            <Link
-              href={`/nftmail?upgrade=lite&label=${name}`}
-              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-[10px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0 whitespace-nowrap"
-            >
-              Molt Now →
-            </Link>
-          </div>
-        )}
-
-        {/* ── Lite tier: no-send notice ── */}
-        {accountTier === 'basic' && !canSend && isOwner && daysLeft === null && (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-medium text-amber-300">Receive-only inbox</p>
-              <p className="text-[10px] text-[var(--muted)]">Upgrade to Lite ($10) to enable sending &amp; get your Safe body</p>
+            <p className="text-[11px] text-[var(--muted)]">
+              {accountTier === 'basic'
+                ? `${name}@nftmail.box · Your shell is temporary (8-day decay). Choose your next stage of metamorphosis.`
+                : `${name}@nftmail.box · 30-day cycle. Evolve to Imago for infinite retention and sovereign relay.`}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {accountTier === 'basic' && (
+                <Link
+                  href={`/nftmail?upgrade=lite&label=${name}`}
+                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
+                >
+                  <span className="block text-sm font-bold">10 xDAI</span>
+                  Molt to Pupa
+                </Link>
+              )}
+              <Link
+                href={`/nftmail?upgrade=premium&label=${name}`}
+                className={`rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 ${
+                  accountTier === 'basic' ? '' : 'col-span-2'
+                }`}
+              >
+                <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
+                Evolve to Imago
+              </Link>
             </div>
-            <Link
-              href={`/nftmail?upgrade=lite&label=${name}`}
-              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-[10px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0 whitespace-nowrap"
-            >
-              Upgrade →
-            </Link>
-          </div>
-        )}
-
-        {/* ── Hard privacy upgrade prompt — only for authenticated owner ── */}
-        {isOwner && privacyTier !== 'hard-privacy' && (
-          <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-medium text-cyan-300">Upgrade to Hard Privacy</p>
-              <p className="text-[10px] text-[var(--muted)]">ECIES encryption — 10 xDAI one-time or 1 xDAI/24h subscription</p>
-            </div>
-            <Link
-              href="/nftmail"
-              className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 text-[10px] font-semibold text-cyan-300 transition hover:bg-cyan-500/20 flex-shrink-0"
-            >
-              Upgrade
-            </Link>
+            {daysLeft !== null && daysLeft <= 7 && (
+              <p className="text-[10px] text-amber-300">⚠ {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining — renew before decay</p>
+            )}
           </div>
         )}
 
@@ -1138,12 +1131,20 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Message count ── */}
+        {/* ── Message count + Dashboard link ── */}
         {!loading && messages.length > 0 && (
           <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
-              INBOX ({messages.length})
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
+                INBOX ({messages.length})
+              </span>
+              <Link
+                href="/dashboard"
+                className="rounded-md border border-[var(--border)] bg-black/20 px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition"
+              >
+                Dashboard
+              </Link>
+            </div>
             <span className="text-[9px] text-[var(--muted)]">
               {isImago ? '✦ Sovereign — no decay' : `Messages auto-delete after ${tierDecayDays ?? 8} days`}
             </span>

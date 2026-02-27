@@ -356,7 +356,7 @@ export default function DashboardPage() {
               >
                 Compose
                 <span className="ml-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] text-violet-300 ring-1 ring-violet-500/20">
-                  PREMIUM
+                  EVOLVED
                 </span>
               </button>
               <button
@@ -406,7 +406,7 @@ export default function DashboardPage() {
                   <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
                     <p className="text-xs text-amber-300">{inboxNote}</p>
                     <p className="mt-1 text-[10px] text-[var(--muted)]">
-                      Free tier: receive-only via Cloudflare Worker email routing. Upgrade to Premium for full Zoho mailbox.
+                      Free tier: receive-only via Cloudflare Worker email routing. Evolve to Pupa or Imago to enable sending.
                     </p>
                   </div>
                 )}
@@ -477,12 +477,32 @@ export default function DashboardPage() {
                               />
                             </div>
                           </div>
-                          <Link
-                            href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`}
-                            className="text-[9px] text-[rgba(0,163,255,0.6)] hover:text-[rgb(160,220,255)] transition"
-                          >
-                            Open inbox →
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`}
+                              className="text-[9px] text-[rgba(0,163,255,0.6)] hover:text-[rgb(160,220,255)] transition"
+                            >
+                              Open inbox →
+                            </Link>
+                            <button
+                              onClick={async () => {
+                                if (!selectedName?.email) return;
+                                const label = selectedName.email.replace('@nftmail.box', '');
+                                try {
+                                  await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId: msg.messageId }),
+                                  });
+                                  fetchInbox();
+                                } catch {}
+                              }}
+                              className="text-[9px] text-red-400/60 hover:text-red-400 transition"
+                              title="Delete message"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </motion.div>
@@ -498,16 +518,16 @@ export default function DashboardPage() {
                   <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">
-                        PREMIUM
+                        EVOLVED
                       </span>
-                      <span className="text-sm text-violet-300">Compose & Send requires a Zoho mailbox</span>
+                      <span className="text-sm text-violet-300">Compose & Send requires a PUPA or IMAGO mailbox</span>
                     </div>
                     <p className="mt-2 text-xs text-[var(--muted)]">
-                      Upgrade to Premium on the{' '}
+                      Evolve your inbox on the{' '}
                       <Link href="/nftmail" className="text-violet-300 hover:underline">
                         mint page
                       </Link>{' '}
-                      to provision a full Zoho mailbox with send, compose, and attachment support.
+                      to unlock sending, compose, and your Mirror Body Safe.
                     </p>
                   </div>
                 )}
@@ -618,8 +638,14 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <footer className="mt-auto text-center text-xs text-[var(--muted)]">
-          nftmail.box dashboard — 8-day decay inbox — self-contained identity
+        <footer className="mt-auto flex items-center justify-center gap-3 text-xs text-[var(--muted)]">
+          <span>nftmail.box dashboard — 8-day decay inbox — self-contained identity</span>
+          <Link
+            href="/nftmail"
+            className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap"
+          >
+            Evolve to Imago →
+          </Link>
         </footer>
       </div>
     </div>

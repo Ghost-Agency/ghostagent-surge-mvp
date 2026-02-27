@@ -7,7 +7,7 @@
 ///   4. Checks: correct recipient, sufficient value, confirmed, not already used
 ///   5. Burns txHash in KV to prevent double-spend
 
-import { createPublicClient, http, parseEther, type Hex } from 'viem';
+import { createPublicClient, http, parseEther, parseUnits, type Hex, type Log } from 'viem';
 import { gnosis } from 'viem/chains';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
@@ -16,12 +16,25 @@ const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || '';
 // Treasury Safe on Gnosis — receives all tier upgrade payments
 export const TREASURY_SAFE = (process.env.TREASURY_SAFE_ADDRESS || '0xb7e493e3d226f8fE722CC9916fF164B793af13F4').toLowerCase();
 
-// Tier prices in xDAI (1 xDAI ≈ $1 USD)
+// EURe (Monerium EUR) on Gnosis — Gnosis Pay's stablecoin. 6 decimals.
+export const EURE_CONTRACT = '0xcB444e90D8198415266c6a2724b7900fb12FC56E'.toLowerCase();
+
+// Tier prices in xDAI (18 decimals)
 export const TIER_PRICES_XDAI: Record<string, bigint> = {
-  lite: parseEther('10'),
-  premium: parseEther('24'),
+  lite: parseEther('10'),   // Pupa — 10 xDAI
+  premium: parseEther('24'), // Imago — 24 xDAI/yr
   pro: parseEther('24'),
   ghost: parseEther('24'),
+  agent: parseEther('12'),  // GhostAgent.ninja mint
+};
+
+// Tier prices in EURe (6 decimals). xDAI ≈ USD, EUR ≈ 1.08 USD → round to clean amounts.
+export const TIER_PRICES_EURE: Record<string, bigint> = {
+  lite: parseUnits('10', 6),    // ~10 EUR (close enough to 10 xDAI)
+  premium: parseUnits('22', 6), // ~22 EUR ≈ 24 xDAI/yr
+  pro: parseUnits('22', 6),
+  ghost: parseUnits('22', 6),
+  agent: parseUnits('11', 6),   // ~11 EUR ≈ 12 xDAI
 };
 
 export const TIER_PRICES_USD: Record<string, number> = {
@@ -29,7 +42,19 @@ export const TIER_PRICES_USD: Record<string, number> = {
   premium: 24,
   pro: 24,
   ghost: 24,
+  agent: 12,
 };
+
+// ERC-20 Transfer event ABI (used for EURe payment verification)
+const ERC20_TRANSFER_ABI = [{
+  type: 'event',
+  name: 'Transfer',
+  inputs: [
+    { indexed: true,  name: 'from',  type: 'address' },
+    { indexed: true,  name: 'to',    type: 'address' },
+    { indexed: false, name: 'value', type: 'uint256' },
+  ],
+}] as const;
 
 export interface PaymentVerificationResult {
   valid: boolean;
@@ -152,5 +177,109 @@ export async function verifyXDAIPayment(
     from: tx.from.toLowerCase(),
     value: (Number(tx.value) / 1e18).toFixed(4),
     blockNumber: tx.blockNumber ? Number(tx.blockNumber) : undefined,
+  };
+}
+
+/// Verify an EURe (Gnosis Pay) ERC-20 payment tx on Gnosis chain.
+/// EURe has 6 decimals. We check for a Transfer event from the EURe contract
+/// where `to` == TREASURY_SAFE and `value` >= TIER_PRICES_EURE[tier].
+export async function verifyEUREPayment(
+  txHash: string,
+  tier: string,
+  minConfirmations = 2
+): Promise<PaymentVerificationResult> {
+  if (!txHash || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+    return { valid: false, error: 'Invalid tx hash format (must be 0x + 64 hex chars)' };
+  }
+
+  const expectedMinValue = TIER_PRICES_EURE[tier];
+  if (!expectedMinValue) {
+    return { valid: false, error: `Unknown tier: ${tier}` };
+  }
+
+  // Double-spend check first (fast, no RPC needed)
+  const burned = await isTxHashBurned(txHash);
+  if (burned) {
+    return { valid: false, error: 'This transaction has already been used to activate a tier upgrade' };
+  }
+
+  let receipt: Awaited<ReturnType<typeof publicClient.getTransactionReceipt>>;
+  try {
+    receipt = await publicClient.getTransactionReceipt({ hash: txHash as Hex });
+  } catch {
+    return { valid: false, error: 'Transaction not found on Gnosis chain. Check the hash and try again.' };
+  }
+
+  if (receipt.status === 'reverted') {
+    return { valid: false, error: 'Transaction reverted on-chain — payment was not completed.' };
+  }
+
+  // Find a Transfer log from the EURe contract where `to` == TREASURY_SAFE
+  const { decodeEventLog } = await import('viem');
+  let transferFrom: string | null = null;
+  let transferValue: bigint | null = null;
+
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== EURE_CONTRACT) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi: ERC20_TRANSFER_ABI,
+        data: log.data,
+        topics: log.topics as any,
+      });
+      if (
+        decoded.eventName === 'Transfer' &&
+        (decoded.args as any).to?.toLowerCase() === TREASURY_SAFE
+      ) {
+        transferFrom = (decoded.args as any).from as string;
+        transferValue = (decoded.args as any).value as bigint;
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (!transferFrom || transferValue === null) {
+    return {
+      valid: false,
+      error: `No EURe Transfer to treasury found in this tx. Ensure you sent EURe (Gnosis Pay) to ${TREASURY_SAFE}.`,
+    };
+  }
+
+  // Check amount >= expected
+  if (transferValue < expectedMinValue) {
+    const sentEure = Number(transferValue) / 1e6;
+    const expectedEure = Number(expectedMinValue) / 1e6;
+    return {
+      valid: false,
+      error: `Insufficient EURe payment: sent ${sentEure.toFixed(2)} EURe, expected at least ${expectedEure.toFixed(2)} EURe`,
+    };
+  }
+
+  // Check confirmations
+  if (receipt.blockNumber === null || receipt.blockNumber === undefined) {
+    return { valid: false, error: 'Transaction is still pending. Wait for confirmation on Gnosis and try again.' };
+  }
+
+  try {
+    const currentBlock = await publicClient.getBlockNumber();
+    const confirmations = Number(currentBlock - receipt.blockNumber);
+    if (confirmations < minConfirmations) {
+      return {
+        valid: false,
+        error: `Transaction has ${confirmations} confirmation${confirmations === 1 ? '' : 's'}. Please wait for ${minConfirmations} (~${minConfirmations * 5}s) and try again.`,
+      };
+    }
+  } catch {
+    // Block number check failure is non-fatal
+  }
+
+  return {
+    valid: true,
+    txHash: txHash.toLowerCase(),
+    from: transferFrom.toLowerCase(),
+    value: (Number(transferValue) / 1e6).toFixed(2) + ' EURe',
+    blockNumber: receipt.blockNumber ? Number(receipt.blockNumber) : undefined,
   };
 }
