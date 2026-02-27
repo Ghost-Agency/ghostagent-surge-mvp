@@ -136,10 +136,13 @@ export async function GET(req: NextRequest) {
         }
       }
       if (label) {
+        // On-chain GNO subname uses hyphens (mac-slave.nftmail.gno)
+        // but canonical email address uses dots (mac.slave@nftmail.box)
+        const emailLabel = label.replace(/-/g, '.');
         names.push({
           tokenId,
           label,
-          email: `${label}@nftmail.box`,
+          email: `${emailLabel}@nftmail.box`,
           gnoName: `${label}.nftmail.gno`,
         });
       }

@@ -2,6 +2,9 @@
   command = "npm run build"
   publish = ".next"
 
+[context.production]
+  environment = { NETLIFY_SITE_ID = "1d43da05-ccb8-48f0-95e0-ddfd4df97552" }
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 

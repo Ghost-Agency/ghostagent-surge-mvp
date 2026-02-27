@@ -1,7 +1,7 @@
 'use client';
 
 import { PrivyProvider } from '@privy-io/react-auth';
-import { PropsWithChildren } from 'react';
+import { PropsWithChildren, useEffect, useState } from 'react';
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
 
@@ -33,6 +33,11 @@ function isValidPrivyAppId(appId: string | undefined) {
 }
 
 export function Providers({ children }: PropsWithChildren) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!mounted) return null;
+
   if (!isValidPrivyAppId(PRIVY_APP_ID)) {
     return (
       <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.16),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.14),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">

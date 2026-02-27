@@ -19,6 +19,15 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'NFTMail.box',
   description: 'Mint a self-contained email identity on Gnosis',
+  icons: {
+    icon: '/nftmail-logo-32.png',
+    apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: 'NFTMail.box',
+    description: 'Mint a self-contained email identity on Gnosis',
+    images: [{ url: '/nftmail-logo.png' }],
+  },
 };
 
 export default function RootLayout({

@@ -301,20 +301,23 @@ export class MailStorageAdapter {
 
   // A2A Ghost-Wire: agent-to-agent direct KV transfer, zero SMTP cost
   async sendA2A(fromAgent: string, toAgent: string, subject: string, content: string): Promise<Response> {
+    // Normalize: strip trailing _ for consistent KV key (handleAgentMail stores under identityName without _)
+    const normalizedTo = toAgent.endsWith('_') ? toAgent.slice(0, -1) : toAgent;
+    const normalizedFrom = fromAgent.endsWith('_') ? fromAgent.slice(0, -1) : fromAgent;
     const email: EmailData = {
-      from: `${fromAgent}_@nftmail.box`,
-      to: `${toAgent}_@nftmail.box`,
+      from: `${normalizedFrom}_@nftmail.box`,
+      to: `${normalizedTo}_@nftmail.box`,
       subject,
       content,
       timestamp: Date.now()
     };
 
-    return this.pushToSovereignKV(toAgent, email, {
+    return this.pushToSovereignKV(normalizedTo, email, {
       isInternal: true,
       isVerified: true,
       channel: 'ghost-wire',
-      senderAgent: fromAgent,
-      recipientAgent: toAgent
+      senderAgent: `${normalizedFrom}_`,
+      recipientAgent: `${normalizedTo}_`
     });
   }
 

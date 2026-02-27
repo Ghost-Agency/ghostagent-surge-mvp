@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const CANARY_FILE_URL = 'https://raw.githubusercontent.com/eyemine/nftmailbox-netlify/main/CANARY.txt';
+const CANARY_FILE_URL = 'https://raw.githubusercontent.com/Ghost-Agency/ghostagent-ninja-mvp/main/apps/nftmailbox/CANARY.txt';
 
 export function WarrantCanary() {
   const [lastChecked, setLastChecked] = useState<string | null>(null);

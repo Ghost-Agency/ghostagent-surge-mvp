@@ -73,6 +73,10 @@ const DAILY_LIMIT = parseInt(process.env.GASLESS_DAILY_LIMIT || '100', 10);
 let mintCountToday = 0;
 let lastResetDate = new Date().toISOString().slice(0, 10);
 
+// In-flight mutex: prevents race condition where two concurrent requests both pass
+// the on-chain check before either tx confirms (covers double-click scenarios)
+const inFlightLabels = new Set<string>();
+
 function checkRateLimit(): boolean {
   const today = new Date().toISOString().slice(0, 10);
   if (today !== lastResetDate) {
@@ -99,10 +103,16 @@ export async function POST(req: NextRequest) {
 
     if (!label || typeof label !== 'string' || label.length < 3) {
       return NextResponse.json(
-        { error: 'Label must be at least 3 characters (name1.name2)' },
+        { error: 'Label must be at least 3 characters' },
         { status: 400 }
       );
     }
+
+    // GNS label uses hyphen (mac-slave.nftmail.gno)
+    // nftmail.box email uses dot (mac.slave@nftmail.box)
+    // Derive emailLocal by replacing first hyphen separator with dot
+    const hyphenIdx = label.indexOf('-');
+    const emailLocal = hyphenIdx !== -1 ? label.slice(0, hyphenIdx) + '.' + label.slice(hyphenIdx + 1) : label;
 
     if (!owner || !/^0x[a-fA-F0-9]{40}$/.test(owner)) {
       return NextResponse.json(
@@ -152,63 +162,109 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if name already exists on-chain
+    // GNS registry owner() reverts for unminted subnodes — treat revert as available
     const labelhash = keccak256(encodePacked(['string'], [label]));
     const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
-    const existingOwner = await publicClient.readContract({
-      address: GNS_REGISTRY,
-      abi: GNSRegistryABI,
-      functionName: 'owner',
-      args: [subnode],
-    });
-    if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
+    try {
+      const existingOwner = await publicClient.readContract({
+        address: GNS_REGISTRY,
+        abi: GNSRegistryABI,
+        functionName: 'owner',
+        args: [subnode],
+      });
+      if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
+        return NextResponse.json(
+          { error: `${label}.nftmail.gno is already minted. Choose a different name.` },
+          { status: 409 }
+        );
+      }
+    } catch {
+      // Revert means subnode doesn't exist in registry — name is available, proceed
+    }
+
+    // In-flight mutex: reject if another request is already minting this label
+    if (inFlightLabels.has(label)) {
       return NextResponse.json(
-        { error: `${label}.nftmail.gno is already minted. Choose a different name.` },
+        { error: `${label}.nftmail.gno is currently being minted. Please wait.` },
         { status: 409 }
       );
     }
+    inFlightLabels.add(label);
 
-    // Submit mint transaction
-    const hash = await walletClient.writeContract({
-      address: REGISTRAR,
-      abi: NamespaceRegistrarABI,
-      functionName: 'mintSubname',
-      args: [
-        label,
-        owner as `0x${string}`,
-        '0x',
-        '0x0000000000000000000000000000000000000000000000000000000000000000',
-      ],
-    });
+    try {
+      // Submit mint transaction
+      const hash = await walletClient.writeContract({
+        address: REGISTRAR,
+        abi: NamespaceRegistrarABI,
+        functionName: 'mintSubname',
+        args: [
+          label,
+          owner as `0x${string}`,
+          '0x',
+          '0x0000000000000000000000000000000000000000000000000000000000000000',
+        ],
+      });
 
-    // Wait for receipt
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      // Wait for receipt
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-    // Increment rate limit counter
-    mintCountToday++;
+      // Increment rate limit counter
+      mintCountToday++;
 
-    // Extract TBA from events
-    let tbaAddress = '';
-    for (const log of receipt.logs) {
-      try {
-        const decoded = decodeEventLog({
-          abi: NamespaceRegistrarABI,
-          data: log.data,
-          topics: log.topics,
-        });
-        if (decoded.eventName === 'TokenboundAccountCreated') {
-          tbaAddress = (decoded.args as any).account;
+      // Extract TBA from events
+      let tbaAddress = '';
+      for (const log of receipt.logs) {
+        try {
+          const decoded = decodeEventLog({
+            abi: NamespaceRegistrarABI,
+            data: log.data,
+            topics: log.topics,
+          });
+          if (decoded.eventName === 'TokenboundAccountCreated') {
+            tbaAddress = (decoded.args as any).account;
+          }
+        } catch {}
+      }
+
+      // ─── Register sovereign inbox in nftmail-email-worker KV ───
+      const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+      const webhookSecret = process.env.NFTMAIL_WEBHOOK_SECRET;
+      let kvRegistered = false;
+      if (webhookSecret) {
+        try {
+          const kvRes = await fetch(workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'registerSovereign',
+              secret: webhookSecret,
+              label,
+              controller: owner,
+              originNft: `${label}.nftmail.gno`,
+              legacyIdentity: emailLocal,
+              mintedTokenId: null,
+              privacyTier: 'exposed',
+            }),
+          });
+          const kvJson = await kvRes.json() as any;
+          kvRegistered = kvJson?.status === 'registered';
+        } catch {
+          // Non-fatal — KV can be backfilled manually
         }
-      } catch {}
-    }
+      }
 
-    return NextResponse.json({
-      success: true,
-      txHash: hash,
-      tbaAddress,
-      label,
-      email: `${label}@nftmail.box`,
-      sponsor: account.address,
-    });
+      return NextResponse.json({
+        success: true,
+        txHash: hash,
+        tbaAddress,
+        label,
+        email: `${emailLocal}@nftmail.box`,
+        sponsor: account.address,
+        kvRegistered,
+      });
+    } finally {
+      inFlightLabels.delete(label);
+    }
   } catch (err: any) {
     console.error('Gasless mint error:', err);
     return NextResponse.json(

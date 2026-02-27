@@ -2,10 +2,22 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createWalletClient, createPublicClient, custom, http, decodeEventLog } from 'viem';
+import { createWalletClient, createPublicClient, custom, http, decodeEventLog, keccak256, encodePacked, namehash } from 'viem';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { gnosis, GHOST_REGISTRY } from '../utils/chains';
+import { gnosis, GHOST_REGISTRY, GNO_REGISTRARS } from '../utils/chains';
 import GhostRegistryABI from '../abi/GhostRegistry.json';
+import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
+
+const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
+const GNSRegistryABI = [
+  {
+    inputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
+    name: 'owner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
 
 interface MintAgentBundleProps {
   agentName: string;
@@ -63,11 +75,32 @@ export function MintAgentBundle({ agentName, safeAddress, namespace = 'agent' }:
         transport: http(),
       });
 
+      // On-chain duplicate check: verify subname doesn't already exist
+      const parentNode = namehash(`${namespace}.gno`);
+      const labelhash = keccak256(encodePacked(['string'], [agentName]));
+      const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [parentNode, labelhash]));
+      const existingOwner = await publicClient.readContract({
+        address: GNS_REGISTRY,
+        abi: GNSRegistryABI,
+        functionName: 'owner',
+        args: [subnode],
+      });
+      if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
+        throw new Error(`${agentName}.${namespace}.gno is already minted.`);
+      }
+
+      // Mint via namespace registrar (owner = user's wallet)
+      const registrar = GNO_REGISTRARS[namespace as keyof typeof GNO_REGISTRARS];
       const hash = await walletClient.writeContract({
-        address: GHOST_REGISTRY,
-        abi: GhostRegistryABI,
-        functionName: 'register',
-        args: [agentName, safeAddress],
+        address: registrar,
+        abi: NamespaceRegistrarABI,
+        functionName: 'mintSubname',
+        args: [
+          agentName,
+          wallet.address as `0x${string}`,
+          '0x' as `0x${string}`,
+          '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
+        ],
       });
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -76,12 +109,12 @@ export function MintAgentBundle({ agentName, safeAddress, namespace = 'agent' }:
       for (const log of receipt.logs) {
         try {
           const decoded = decodeEventLog({
-            abi: GhostRegistryABI,
+            abi: NamespaceRegistrarABI,
             data: log.data,
             topics: log.topics,
           });
-          if (decoded.eventName === 'Registered') {
-            tbaAddress = (decoded.args as any).tba;
+          if (decoded.eventName === 'TokenboundAccountCreated') {
+            tbaAddress = (decoded.args as any).account;
           }
         } catch {
           // Not our event
@@ -89,7 +122,7 @@ export function MintAgentBundle({ agentName, safeAddress, namespace = 'agent' }:
       }
 
       if (!tbaAddress) {
-        throw new Error('TBA address not found in Registered event');
+        throw new Error('TBA address not found in mint events');
       }
 
       setResult(prev => ({ ...prev, tbaAddress, gnosisTxHash: hash }));

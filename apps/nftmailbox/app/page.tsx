@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function Home() {
   const router = useRouter();
@@ -35,13 +36,17 @@ export default function Home() {
 
         {/* Header */}
         <header className="flex w-full items-center justify-between">
-          <div className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)]">NFTMAIL.BOX</div>
+          <div className="flex items-center gap-2">
+            <Image src="/nftmail-logo.png" alt="NFTMail" width={48} height={48} className="opacity-95" />
+            <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
+          </div>
           <div className="flex items-center gap-3">
             <a
-              href="http://localhost:3000"
+              href="https://ghostagent.ninja"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full border border-[var(--border)] bg-black/20 px-4 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
+              style={{ backgroundColor: '#150903' }}
+              className="rounded-full border border-[rgba(255,120,40,0.25)] px-4 py-2 text-xs font-semibold text-[#d8d4cf] transition hover:brightness-125"
             >
               GhostAgent.ninja
             </a>
@@ -50,7 +55,7 @@ export default function Home() {
 
         {/* Hero */}
         <section className="text-center">
-          <h1 className="text-5xl font-bold tracking-tight text-white">nftmail.box</h1>
+          <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-5xl font-bold tracking-tight">nftmail.box</h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-[var(--muted)]">
             Sovereign email identity on Gnosis. Mint, read, or check any inbox.
           </p>
@@ -94,6 +99,15 @@ export default function Home() {
               {' · '}
               <button type="button" onClick={() => { setEmailInput('agent_molt'); }} className="text-violet-300 hover:underline">agent_molt</button> (Glass Box)
             </p>
+            <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
+              <p className="text-[10px] text-[var(--muted)]">Manage all your inboxes in one place</p>
+              <Link
+                href="/dashboard"
+                className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
+              >
+                Dashboard →
+              </Link>
+            </div>
           </div>
         </section>
 
@@ -117,12 +131,6 @@ export default function Home() {
                 className="rounded-lg bg-[rgba(0,163,255,0.12)] px-6 py-2.5 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] border border-[rgba(0,163,255,0.3)]"
               >
                 Mint NFTMail
-              </Link>
-              <Link
-                href="/dashboard"
-                className="rounded-lg bg-black/20 px-6 py-2.5 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30 border border-[var(--border)]"
-              >
-                Dashboard
               </Link>
             </div>
           </div>

@@ -31,11 +31,27 @@ interface MintResult {
   gasless?: boolean;
 }
 
-export function MintNFTMail() {
+export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
-  const [name1, setName1] = useState('');
-  const [name2, setName2] = useState('');
+
+  // Pre-fill from initialName.
+  // ENS single-name (e.g. rgbanksy) → name1=rgbanksy, name2='' (single-name mint path)
+  // Two-part (e.g. mac.slave or mac-slave) → split into name1+name2
+  const parseInitial = (v?: string): [string, string] => {
+    if (!v) return ['', ''];
+    const clean = v.toLowerCase().replace(/[^a-z0-9-.]/g, '');
+    const sep = clean.indexOf('.') !== -1 ? '.' : clean.indexOf('-') !== -1 ? '-' : null;
+    if (sep) {
+      const idx = clean.indexOf(sep);
+      return [clean.slice(0, idx), clean.slice(idx + 1)];
+    }
+    return [clean, ''];
+  };
+  const [initN1, initN2] = parseInitial(initialName);
+
+  const [name1, setName1] = useState(initN1);
+  const [name2, setName2] = useState(initN2);
   const [step, setStep] = useState<MintStep>('idle');
   const [result, setResult] = useState<MintResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,33 +61,58 @@ export function MintNFTMail() {
   const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const registrar = GNO_REGISTRARS.nftmail;
-  const label = name1 && name2 ? `${name1}.${name2}` : '';
+  // Single-name: rgbanksy → label=rgbanksy, email=rgbanksy@nftmail.box
+  // Two-part:    mac + slave → label=mac-slave, email=mac.slave@nftmail.box
+  const isSingleName = !!(name1 && !name2);
+  const label = name1 && name2 ? `${name1}-${name2}` : name1 ? name1 : '';
+  const emailLocal = name1 && name2 ? `${name1}.${name2}` : name1 ? name1 : '';
   const fullGno = label ? `${label}.nftmail.gno` : '';
-  const fullEmail = label ? `${label}@nftmail.box` : '';
+  const fullEmail = emailLocal ? `${emailLocal}@nftmail.box` : '';
 
   const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
   const anyWallet = wallets[0];
+  const isSocialLogin = !injectedWallet && !!anyWallet;
 
   // Debounced on-chain name availability check
   useEffect(() => {
     if (checkTimer.current) clearTimeout(checkTimer.current);
-    if (!label || name1.length < 2 || name2.length < 2) {
+    if (!label || name1.length < 2 || (!isSingleName && name2.length < 2)) {
       setNameStatus('idle');
       return;
     }
     setNameStatus('checking');
     checkTimer.current = setTimeout(async () => {
       try {
-        const publicClient = createPublicClient({ chain: gnosis, transport: http() });
-        const labelhash = keccak256(encodePacked(['string'], [label]));
-        const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
-        const owner = await publicClient.readContract({
-          address: GNS_REGISTRY,
-          abi: GNSRegistryABI,
-          functionName: 'owner',
-          args: [subnode],
-        });
-        setNameStatus(owner && owner !== '0x0000000000000000000000000000000000000000' ? 'taken' : 'available');
+        // Check 1: on-chain GNS registry (label = mac-slave)
+        let onChainTaken = false;
+        try {
+          const publicClient = createPublicClient({ chain: gnosis, transport: http() });
+          const labelhash = keccak256(encodePacked(['string'], [label]));
+          const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
+          const owner = await publicClient.readContract({
+            address: GNS_REGISTRY,
+            abi: GNSRegistryABI,
+            functionName: 'owner',
+            args: [subnode],
+          });
+          onChainTaken = !!(owner && owner !== '0x0000000000000000000000000000000000000000');
+        } catch {
+          // GNS owner() reverts for unminted subnodes — treat as available
+        }
+        if (onChainTaken) { setNameStatus('taken'); return; }
+
+        // Check 2: worker KV — email local-part (dot format: mac.slave) may already be claimed
+        try {
+          const res = await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'resolveAddress', name: emailLocal }),
+          });
+          const data = await res.json() as any;
+          if (data.exists) { setNameStatus('taken'); return; }
+        } catch {}
+
+        setNameStatus('available');
       } catch {
         setNameStatus('idle');
       }
@@ -85,8 +126,12 @@ export function MintNFTMail() {
       setError('Connect your wallet first');
       return;
     }
-    if (!name1 || name1.length < 2 || !name2 || name2.length < 2) {
-      setError('Both name parts must be at least 2 characters');
+    if (!name1 || name1.length < 2) {
+      setError('Name must be at least 2 characters');
+      return;
+    }
+    if (!isSingleName && (!name2 || name2.length < 2)) {
+      setError('Second name part must be at least 2 characters');
       return;
     }
 
@@ -137,8 +182,12 @@ export function MintNFTMail() {
       setError('Connect an external wallet (Rabby/MetaMask). Embedded wallets are not funded for gas.');
       return;
     }
-    if (!name1 || name1.length < 2 || !name2 || name2.length < 2) {
-      setError('Both name parts must be at least 2 characters');
+    if (!name1 || name1.length < 2) {
+      setError('Name must be at least 2 characters');
+      return;
+    }
+    if (!isSingleName && (!name2 || name2.length < 2)) {
+      setError('Second name part must be at least 2 characters');
       return;
     }
 
@@ -166,6 +215,19 @@ export function MintNFTMail() {
       });
       if (balanceWei === BigInt(0)) {
         throw new Error(`Wallet ${wallet.address} has 0 xDAI. Fund this wallet or connect a different wallet.`);
+      }
+
+      // On-chain duplicate check before minting
+      const labelhash = keccak256(encodePacked(['string'], [label]));
+      const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
+      const existingOwner = await publicClient.readContract({
+        address: GNS_REGISTRY,
+        abi: GNSRegistryABI,
+        functionName: 'owner',
+        args: [subnode],
+      });
+      if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
+        throw new Error(`${label}.nftmail.gno is already minted. Choose a different name.`);
       }
 
       const hash = await walletClient.writeContract({
@@ -218,38 +280,68 @@ export function MintNFTMail() {
     <>
       <div className="space-y-4">
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.18em] text-[var(--muted)]">CHOOSE YOUR NAME</label>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              value={name1}
-              onChange={(e) => {
-                setName1(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
-                setError(null);
-              }}
-              placeholder="e.g. alice"
-              disabled={step === 'minting'}
-              className="rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
-            />
-            <input
-              type="text"
-              value={name2}
-              onChange={(e) => {
-                setName2(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
-                setError(null);
-              }}
-              placeholder="e.g. ops"
-              disabled={step === 'minting'}
-              className="rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
-            />
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <div className="text-xs text-[var(--muted)]">
-              {name1 || 'name1'}<span className="text-white/30">.</span>
-              {name2 || 'name2'}<span className="text-white/30">.nftmail.gno</span>
+          <label className="text-[10px] font-semibold tracking-[0.18em] text-[var(--muted)]">
+            {initialName ? 'CLAIM YOUR NFT MAIL ADDRESS' : 'CHOOSE YOUR NAME'}
+          </label>
+
+          {/* Single-name path (ENS claim): one input only */}
+          {isSingleName ? (
+            <div className="mt-2">
+              <input
+                type="text"
+                value={name1}
+                onChange={(e) => {
+                  setName1(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
+                  setError(null);
+                }}
+                placeholder="e.g. rgbanksy"
+                disabled={step === 'minting'}
+                className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
+              />
+              <p className="mt-1.5 text-[10px] text-[var(--muted)]">
+                Add a second part? Type it below — or mint as <span className="text-white">{name1}@nftmail.box</span>
+              </p>
+              <input
+                type="text"
+                value={name2}
+                onChange={(e) => {
+                  setName2(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
+                  setError(null);
+                }}
+                placeholder="optional second part (e.g. eth)"
+                disabled={step === 'minting'}
+                className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
+              />
             </div>
-          </div>
-          {label && (
+          ) : (
+            /* Two-part path (social mint): two equal inputs */
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={name1}
+                onChange={(e) => {
+                  setName1(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
+                  setError(null);
+                }}
+                placeholder="e.g. alice"
+                disabled={step === 'minting'}
+                className="rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
+              />
+              <input
+                type="text"
+                value={name2}
+                onChange={(e) => {
+                  setName2(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
+                  setError(null);
+                }}
+                placeholder="e.g. ops"
+                disabled={step === 'minting'}
+                className="rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
+              />
+            </div>
+          )}
+
+          {label && name1.length >= 2 && (isSingleName || name2.length >= 2) && (
             <div className="mt-2 space-y-1">
               <div className="flex items-center gap-2">
                 <p className="text-xs text-[rgb(160,220,255)]">{fullGno} → {fullEmail}</p>
@@ -263,7 +355,7 @@ export function MintNFTMail() {
                   <span className="text-[10px] text-red-400 font-semibold">✗ already taken</span>
                 )}
               </div>
-              <p className="text-[10px] text-[var(--muted)]">Self-contained — same TBA, zero dependency on creation.ip</p>
+              <p className="text-[10px] text-[var(--muted)]">Free — 8-day inbox, receive only. Upgrade to Lite to send &amp; molt.</p>
             </div>
           )}
         </div>
@@ -297,7 +389,7 @@ export function MintNFTMail() {
 
         <button
           onClick={mint}
-          disabled={!label || name1.length < 2 || name2.length < 2 || step === 'minting' || nameStatus === 'taken' || nameStatus === 'checking'}
+          disabled={!label || name1.length < 2 || (!isSingleName && name2.length < 2) || step === 'minting' || step === 'done' || nameStatus === 'taken' || nameStatus === 'checking'}
           className={`flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
             mintMode === 'gasless'
               ? 'border-emerald-500/35 bg-emerald-500/8 text-emerald-300 hover:bg-emerald-500/16 hover:shadow-[0_0_24px_rgba(16,185,129,0.12)]'

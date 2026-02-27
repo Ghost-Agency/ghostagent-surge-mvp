@@ -2,11 +2,22 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createWalletClient, createPublicClient, custom, http, decodeEventLog } from 'viem';
+import { createWalletClient, createPublicClient, custom, http, decodeEventLog, keccak256, encodePacked, namehash } from 'viem';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { gnosis, GNO_REGISTRARS } from '../utils/chains';
 import type { Namespace } from './NamespaceSelect';
 import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
+
+const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
+const GNSRegistryABI = [
+  {
+    inputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
+    name: 'owner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
 
 interface MintButtonProps {
   namespace: Namespace;
@@ -82,6 +93,20 @@ export function MintButton({ namespace, agentName }: MintButtonProps) {
         chain: gnosis,
         transport: http(),
       });
+
+      // On-chain duplicate check: verify subname doesn't already exist
+      const parentNode = namehash(`${namespace}.gno`);
+      const labelhash = keccak256(encodePacked(['string'], [agentName]));
+      const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [parentNode, labelhash]));
+      const existingOwner = await publicClient.readContract({
+        address: GNS_REGISTRY,
+        abi: GNSRegistryABI,
+        functionName: 'owner',
+        args: [subnode],
+      });
+      if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
+        throw new Error(`${agentName}.${namespace}.gno is already minted.`);
+      }
 
       // Call registrar.mintSubname(label, owner, storyData, tbaSalt)
       const hash = await walletClient.writeContract({

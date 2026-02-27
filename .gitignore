@@ -51,3 +51,6 @@ broadcast/
 artifacts/
 cache/
 coverage/
+
+# Local Netlify folder
+.netlify

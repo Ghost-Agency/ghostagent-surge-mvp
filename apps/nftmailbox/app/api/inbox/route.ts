@@ -48,10 +48,91 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid nftmail.box email' }, { status: 400 });
     }
 
+    // Extract local part and derive agentName (strip trailing _)
+    const localPart = email.split('@')[0];
+    const agentName = localPart.endsWith('_') ? localPart.slice(0, -1) : localPart;
+
+    // Always fetch from Worker KV (all streams store here)
+    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+    let kvMessages: any[] = [];
+
+    let workerError = '';
+    try {
+      const workerRes = await fetch(workerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'getBlindInbox',
+          localPart: agentName
+        })
+      });
+
+      if (workerRes.ok) {
+        const workerData = await workerRes.json() as Record<string, any>;
+        // decayDays from resolveAddress: 8 for Larva, 30 for Pupa, null for Imago/Agent
+        const acctDecayDays: number | null = workerData.decayDays ?? null;
+        kvMessages = (workerData.messages || []).map((m: any) => {
+          const isEnc = m.encrypted === true;
+          const now = Date.now();
+          const receivedMs = m.receivedAt || now;
+          const frozen = m.frozen === true;
+          // Frozen emails never decay; use per-message decayDays if available, else account default
+          const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
+          const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
+          const ageMs = now - receivedMs;
+
+          return {
+            id: m.id,
+            subject: isEnc ? '(encrypted)' : (m.payload?.subject || '(no subject)'),
+            sender: isEnc ? '' : (m.payload?.from || 'unknown'),
+            fromAddress: isEnc ? '' : (m.payload?.from || ''),
+            receivedTime: new Date(receivedMs).toISOString(),
+            summary: isEnc ? '' : (m.payload?.body?.slice(0, 200) || ''),
+            isRead: false,
+            hasAttachment: false,
+            encrypted: isEnc,
+            type: m.type || '',
+            contentHash: m.envelope?.contentHash || m.plaintextHash || '',
+            frozen,
+            decayDays: frozen ? null : msgDecayDays,
+            decayPct: frozen ? 0 : Math.min(100, Math.round((ageMs / decayMs) * 100)),
+            expiresAt: frozen ? null : new Date(receivedMs + decayMs).toISOString(),
+            expired: !frozen && ageMs >= decayMs,
+          };
+        });
+      } else {
+        workerError = `Worker returned ${workerRes.status}: ${await workerRes.text().catch(() => '')}`;
+        console.error('Worker KV fetch failed:', workerError);
+      }
+    } catch (e: any) {
+      workerError = e?.message || String(e);
+      console.error('Worker KV fetch error:', workerError);
+    }
+
+    // If we have KV messages, return them directly (KV is the source of truth)
+    if (kvMessages.length > 0) {
+      const active = kvMessages.filter((m: any) => !m.expired);
+      const hasEncrypted = active.some((m: any) => m.encrypted);
+      const hasCleartext = active.some((m: any) => !m.encrypted);
+      const tier = hasEncrypted && !hasCleartext ? 'L2' : hasEncrypted ? 'L1' : 'L0';
+
+      return NextResponse.json({
+        messages: active,
+        total: active.length,
+        tier,
+      });
+    }
+
+    // For human stream (no underscore or dot), try Zoho API as fallback
     const zohoOrgId = process.env.ZOHO_ORG_ID;
     const token = await getZohoAccessToken();
     if (!token || !zohoOrgId) {
-      return NextResponse.json({ error: 'Zoho not configured' }, { status: 503 });
+      return NextResponse.json({ 
+        messages: [], 
+        tier: 'free',
+        note: 'Zoho not configured. Human stream messages may not be available.',
+        ...(workerError ? { workerError } : {}),
+      });
     }
 
     // 1. Find the account ID for this email
@@ -106,7 +187,7 @@ export async function GET(req: NextRequest) {
     const messagesData = (await messagesRes.json()) as Record<string, any>;
     const rawMessages = messagesData?.data || [];
 
-    // 3. Calculate 8-day decay
+    // 3. Zoho fallback — basic tier, 8-day decay
     const now = Date.now();
     const EIGHT_DAYS_MS = 8 * 24 * 60 * 60 * 1000;
 

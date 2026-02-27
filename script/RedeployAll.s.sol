@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import { GNSRegistry } from "../src/GNSRegistry.sol";
 import { StoryIpaRegistryStub } from "../src/StoryIpaRegistryStub.sol";
 import { RegistrarFactory } from "../src/RegistrarFactory.sol";
+import { NamespaceRegistrar } from "../src/NamespaceRegistrar.sol";
 
 contract RedeployAll is Script {
     function run() external {
@@ -64,11 +65,21 @@ contract RedeployAll is Script {
         gns.authoriseCaller(vaultReg, true);
         gns.authoriseCaller(nftmailReg, true);
 
-        // 6. Transfer GNS Registry ownership to Safe
+        // 6. Transfer registrar ownership to Safe
+        //    (Safe can then call authoriseMinter to whitelist treasury wallets)
+        NamespaceRegistrar(agentReg).transferOwnership(safe);
+        NamespaceRegistrar(openclawReg).transferOwnership(safe);
+        NamespaceRegistrar(moltReg).transferOwnership(safe);
+        NamespaceRegistrar(picoclawReg).transferOwnership(safe);
+        NamespaceRegistrar(vaultReg).transferOwnership(safe);
+        NamespaceRegistrar(nftmailReg).transferOwnership(safe);
+        console.log("All registrar ownership transferred to Safe");
+
+        // 7. Transfer GNS Registry ownership to Safe
         gns.transferOwnership(safe);
         console.log("GNSRegistry ownership transferred to Safe");
 
-        // 7. Transfer Factory ownership to Safe
+        // 8. Transfer Factory ownership to Safe
         factory.transferOwnership(safe);
         console.log("Factory ownership transferred to Safe");
 

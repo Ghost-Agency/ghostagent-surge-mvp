@@ -69,3 +69,8 @@ export const STORY_SUB_REGISTRAR = '0x3C1Aa0F0949E40cABbE4e14B1297DA50a4F6D7CA' 
 
 // ─── BrainModule: Safe module that awakens agents for A2A email ───
 export const BRAIN_MODULE = '0x291e8405096413407c3Ddd8850Fb101b446f5200' as `0x${string}`;
+
+// ─── Safe v1.3.0 Canonical Addresses (same on all EVM chains including Story L1) ───
+export const SAFE_SINGLETON = '0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552' as `0x${string}`;
+export const SAFE_PROXY_FACTORY = '0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2' as `0x${string}`;
+export const SAFE_FALLBACK_HANDLER = '0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4' as `0x${string}`;

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 import { WarrantCanary } from '../components/WarrantCanary';
 import { TogglePrivacy } from '../components/TogglePrivacy';
 import { MoltToPrivate } from '../components/MoltToPrivate';
@@ -211,8 +212,9 @@ export default function DashboardPage() {
 
         {/* Header */}
         <header className="flex items-center justify-between">
-          <Link href="/nftmail" className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)] hover:text-white transition">
-            NFTMAIL.BOX
+          <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
+            <Image src="/nftmail-logo.png" alt="NFTMail" width={40} height={40} className="opacity-95" />
+            <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
           </Link>
           <div className="flex items-center gap-3">
             {authenticated && preferredWallet && (
@@ -475,6 +477,12 @@ export default function DashboardPage() {
                               />
                             </div>
                           </div>
+                          <Link
+                            href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`}
+                            className="text-[9px] text-[rgba(0,163,255,0.6)] hover:text-[rgb(160,220,255)] transition"
+                          >
+                            Open inbox →
+                          </Link>
                         </div>
                       </div>
                     </motion.div>
