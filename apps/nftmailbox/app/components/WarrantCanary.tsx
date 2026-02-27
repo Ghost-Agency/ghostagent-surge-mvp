@@ -20,8 +20,11 @@ export function WarrantCanary() {
         // CANARY.txt format: "ALIVE <ISO timestamp>"
         const match = text.match(/^ALIVE\s+(.+)$/m);
         if (match) {
-          setLastChecked(match[1].trim());
-          setAlive(true);
+          const ts = match[1].trim();
+          setLastChecked(ts);
+          const ageMs = Date.now() - new Date(ts).getTime();
+          const stale = ageMs > 48 * 60 * 60 * 1000;
+          setAlive(!stale);
         } else {
           setAlive(false);
         }

@@ -369,7 +369,7 @@ export default function NftmailPage() {
         <div className="flex items-center justify-center gap-3">
           {[
             { key: 'free', label: 'Mint', icon: '1' },
-            { key: 'pro', label: 'Upgrade', icon: '2' },
+            { key: 'pro', label: 'Evolve', icon: '2' },
           ].map((s, i) => {
             const tierOrder: Tier[] = ['none', 'free', 'pro'];
             const currentIdx = tierOrder.indexOf(tier);
@@ -465,32 +465,22 @@ export default function NftmailPage() {
                     tier === 'pro' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-violet-500/15 text-violet-300'
                   }`}
                 >
-                  {tier === 'pro' ? '✓' : '3'}
+                  {tier === 'pro' ? '✓' : '2'}
                 </div>
-                <h2 className="text-lg font-semibold text-white">Evolve to an Imago</h2>
+                <h2 className="text-lg font-semibold text-white">Evolve to Imago</h2>
                 <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">OPTIONAL</span>
               </div>
-              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Pupa deploys a Mirror Body (Gnosis Safe) + enables sending. Increases the 8-day decay to 30-day retention. Permits Molting.</p>
+              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Pupa deploys a Mirror Body (Gnosis Safe) + enables sending. Imago anchors your inbox permanently — no 8-day decay.</p>
             </div>
             <div className="ml-8">
-              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-4 space-y-3">
-                    <p className="text-xs font-semibold text-violet-200">Imago anchors your inbox history permanently.</p>
-                    <p className="text-[11px] text-[var(--muted)] leading-relaxed">
-                      Imago — Sovereign Relay Architecture. Imago removes the email decay and anchors your inbox history permanently in encrypted Cloudflare KV. Send via sovereign relay MTA. No third-party branding. Your keys, your data.
-                    </p>
-                    <ul className="space-y-1 text-[11px] text-[var(--muted)]">
-                      <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Infinite retention — no decay recycle</li>
-                      <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Shared relay MTA — sovereign sending</li>
-                      <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Mirror Body (Gnosis Safe) deployed</li>
-                      <li className="flex items-center gap-1.5"><span className="text-violet-400">✦</span> 24 xDAI/yr or 5000 $SURGE stake</li>
-                    </ul>
-                    <Link
-                      href={`/nftmail?upgrade=pro&label=${mintedName}`}
-                      className="inline-flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-500/20 transition"
-                    >
-                      Evolve →
-                    </Link>
-                  </div>
+              {tier === 'pro' ? (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-3">
+                  <div className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="text-sm text-emerald-300">Imago activated — sovereign identity</span>
+                </div>
+              ) : (
+                <UpgradeTierPanel label={mintedName} defaultTier="pro" />
+              )}
             </div>
           </section>
         ) : null}
@@ -535,8 +525,23 @@ export default function NftmailPage() {
 
 function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: string, tba: string) => void; initialName?: string }) {
   const [manualName, setManualName] = useState('');
-  const [manualTba, setManualTba] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const [nameType, setNameType] = useState<'human' | 'agent'>('human');
+
+  const handleNameChange = (val: string) => {
+    const lower = val.toLowerCase();
+    if (nameType === 'agent') {
+      // agent: allow letters, numbers, dots, hyphens, one trailing underscore
+      setManualName(lower.replace(/[^a-z0-9._-]/g, ''));
+    } else {
+      // human: no underscore
+      setManualName(lower.replace(/[^a-z0-9.-]/g, ''));
+    }
+  };
+
+  const isValid = nameType === 'agent'
+    ? /^[a-z0-9][a-z0-9._-]*_$/.test(manualName)   // must end with _
+    : /^[a-z0-9][a-z0-9.-]+$/.test(manualName);      // standard human name
 
   return (
     <div className="space-y-3">
@@ -549,30 +554,41 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
           Already minted? Enter details →
         </button>
       ) : (
-        <div className="space-y-2 rounded-xl border border-[var(--border)] bg-black/20 p-4">
-          <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">CONFIRM MINT</div>
+        <div className="space-y-3 rounded-xl border border-[var(--border)] bg-black/20 p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">ALREADY MINTED</div>
+            {/* Human / Agent toggle */}
+            <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-[10px] font-semibold">
+              <button
+                onClick={() => { setNameType('human'); setManualName(''); }}
+                className={`px-3 py-1 transition ${nameType === 'human' ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
+              >
+                Human
+              </button>
+              <button
+                onClick={() => { setNameType('agent'); setManualName(''); }}
+                className={`px-3 py-1 transition ${nameType === 'agent' ? 'bg-amber-500/15 text-amber-300' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
+              >
+                Agent
+              </button>
+            </div>
+          </div>
           <input
             type="text"
             value={manualName}
-            onChange={(e) => setManualName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-            placeholder="Name (e.g. alice.ops)"
+            onChange={(e) => handleNameChange(e.target.value)}
+            placeholder={nameType === 'agent' ? 'Agent name (e.g. ghostbot_)' : 'Name (e.g. alice.ops)'}
             className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)]"
           />
-          <input
-            type="text"
-            value={manualTba}
-            onChange={(e) => setManualTba(e.target.value)}
-            placeholder="TBA address (0x...)"
-            className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)]"
-          />
+          {nameType === 'agent' && manualName && !isValid && (
+            <p className="text-[10px] text-amber-400">Agent names must end with an underscore, e.g. <code>ghostbot_</code></p>
+          )}
           <button
-            onClick={() => {
-              if (manualName && manualTba) onMinted(manualName, manualTba);
-            }}
-            disabled={!manualName || !manualTba}
+            onClick={() => { if (isValid) onMinted(manualName, ''); }}
+            disabled={!isValid}
             className="w-full rounded-lg bg-[rgba(0,163,255,0.12)] px-4 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] disabled:opacity-40"
           >
-            Confirm
+            Confirm → Evolve to Imago
           </button>
         </div>
       )}

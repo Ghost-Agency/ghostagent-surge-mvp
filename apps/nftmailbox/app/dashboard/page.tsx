@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -59,6 +60,9 @@ export default function DashboardPage() {
   // Privacy toggle state
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
 
+  const searchParams = useSearchParams();
+  const emailParam = searchParams?.get('email') || null;
+
   const preferredWallet = wallets.find((w: any) => w?.walletClientType === 'injected') || wallets[0];
 
   // Resolve NFTMail names for connected wallet
@@ -70,9 +74,12 @@ export default function DashboardPage() {
       const res = await fetch(`/api/resolve-nftmail?address=${preferredWallet.address}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to resolve names');
-      setNames(data.names || []);
-      if (data.names?.length > 0 && !selectedName) {
-        setSelectedName(data.names[0]);
+      const resolved: NftMailName[] = data.names || [];
+      setNames(resolved);
+      if (resolved.length > 0 && !selectedName) {
+        // If ?email= param matches one of the resolved names, pre-select it
+        const match = emailParam ? resolved.find(n => n.email === emailParam) : null;
+        setSelectedName(match || resolved[0]);
       }
     } catch (err: any) {
       setError(err?.message || 'Failed to resolve NFTMail names');

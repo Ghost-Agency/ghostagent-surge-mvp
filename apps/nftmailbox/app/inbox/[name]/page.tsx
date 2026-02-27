@@ -1139,7 +1139,7 @@ export default function InboxPage() {
                 INBOX ({messages.length})
               </span>
               <Link
-                href="/dashboard"
+                href={isOwner ? `/dashboard?email=${encodeURIComponent(name + '@nftmail.box')}` : '/nftmail'}
                 className="rounded-md border border-[var(--border)] bg-black/20 px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition"
               >
                 Dashboard
@@ -1498,18 +1498,18 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Upgrade CTA ── */}
-        <div className="mt-auto rounded-xl border border-[var(--border)] bg-black/20 px-5 py-4">
-          <div className="flex items-center justify-between">
+        {/* ── Evolve CTA ── */}
+        <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-medium text-white">Upgrade to Molt</p>
-              <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Zoho mailbox, send emails, attachments, premium features</p>
+              <p className="text-xs font-medium text-white">Evolve to Imago to molt</p>
+              <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
             </div>
             <Link
-              href="/nftmail"
-              className="rounded-lg border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] px-5 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)] flex-shrink-0"
+              href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
             >
-              Upgrade
+              Evolve
             </Link>
           </div>
         </div>
